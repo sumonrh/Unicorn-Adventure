@@ -45,7 +45,7 @@
       <div class="rounded-lg bg-white/10 px-2 py-1.5 text-center"><div id="clock" class="font-bold text-sm">☀️</div><div id="modeLabel" class="text-white/60">Morning</div></div>
     </div>
     <button id="playBtn" class="btn w-full mt-2 rounded-xl px-3 py-2.5 text-sm font-extrabold bg-gradient-to-r from-pink-500 to-amber-400 text-white shadow-lg">🦄 Play as Unicorn</button>
-    <p class="text-[10px] text-white/50 mt-1.5 text-center">Third-person · WASD / arrows · Shift gallop · Space jump</p>
+    <p class="text-[10px] text-white/50 mt-1.5 text-center">Ride: W run · A/D steer · S brake · arrows work too</p>
   </div>
 </div>
 
@@ -77,6 +77,7 @@
       <button data-cam="mountain" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🏔️ Mountain Vista</button>
       <button data-cam="bird" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🦅 Bird's Eye</button>
       <button data-cam="bridge" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🌉 Bridge & Pond</button>
+      <button data-cam="falls" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🌊 Falls</button>
       <button data-cam="unicorn" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🦄 Unicorn</button>
       <button data-cam="panda" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🐼 Pandas</button>
     </div>
@@ -88,7 +89,7 @@
     <span class="font-extrabold">⭐ <span id="starCount">0</span> stars</span>
     <button id="camThirdBtn" class="btn active rounded-lg px-2 py-1 text-xs font-bold bg-white/10 border border-white/20 ml-3">🎥 Third</button>
     <button id="camFirstBtn" class="btn rounded-lg px-2 py-1 text-xs font-bold bg-white/10 border border-white/20 ml-1">🦄 First</button>
-    <span class="text-white/60 text-xs ml-3">WASD move · Shift gallop · Space jump · V camera · Esc exit</span>
+    <span class="text-white/60 text-xs ml-3">W run · A/D steer · S brake · Shift gallop · Space jump · V camera · Esc exit</span>
     <span id="levelBadge" class="hidden text-xs font-extrabold ml-2 px-2 py-0.5 rounded-lg bg-amber-400 text-amber-950">👑 Lv 2</span>
     <div id="objective" class="text-amber-200 text-xs mt-1">⭐ Collect 10 stars to reveal the maze</div>
   </div>
@@ -245,19 +246,18 @@ function groundY(x,z){ let g=0; for(const b of BUMPS){ if(x>b.x0&&x<b.x1&&z>b.z0
 function terrain(){
   const g = new THREE.Group(); world.add(g);
   // big 4x4 ground slabs
-  for(let ix=-13; ix<=13; ix++) for(let iz=-13; iz<=13; iz++){
+  for(let ix=-16; ix<=16; ix++) for(let iz=-16; iz<=16; iz++){ // square tiling: no notch gaps
     const d = Math.hypot(ix,iz);
-    if(d>16) continue;
     const h = 1 + Math.max(0, 2.2 - d*0.28) + (Math.random()*0.25);
     vox(g, ix*4, -h/2, iz*4, 4, h, 4, (ix+iz)%3===0?M.grassDry:M.grass).castShadow=false; // ground receives, doesn't cast
     if(Math.random()<0.18){ const bx=ix*4+1, bz=iz*4-1; // 2x2 hill bump
       vox(g, bx, 0.5, bz, 2,1,2, M.grassDry); BUMPS.push({x0:bx-1,x1:bx+1,z0:bz-1,z1:bz+1,top:1}); }
   }
-  // far field: giant 16x16 slabs ring out to 9x the area (radius ~192)
+  // far field: giant 16x16 slabs in a seamless square ring (top 2cm lower: no z-fighting)
   for(let ox=-12; ox<=12; ox++) for(let oz=-12; oz<=12; oz++){
-    const fx=ox*16+8, fz=oz*16+8, fd=Math.hypot(fx,fz);
-    if(fd<60||fd>192) continue;
-    vox(g, fx, -0.5, fz, 16, 1, 16, (ox+oz)%2===0?M.grass:M.grassDry).castShadow=false;
+    const fx=ox*16+8, fz=oz*16+8, m=Math.max(Math.abs(fx),Math.abs(fz));
+    if(m<66||m>190) continue;
+    vox(g, fx, -0.52, fz, 16, 1, 16, (ox+oz)%2===0?M.grass:M.grassDry).castShadow=false;
   }
   // pond basin (carve visual: dirt rim + water)
   for(let ix=-3; ix<=3; ix++) for(let iz=1; iz<=6; iz++){
@@ -276,28 +276,81 @@ function terrain(){
 }
 terrain();
 
-/* ---- Mountains: 4x4 & 2x2 stacked voxels, snow caps ---- */
+/* ---- Mountain rim: giant stepped voxel peaks with snow caps ---- */
 const peaks=[];
 function mountain(cx,cz,baseW,height){
   const g=new THREE.Group(); world.add(g);
-  let w=baseW;
-  for(let y=0;y<height;y+=2){
-    const step = w>10?4:2; // variable voxel size
-    const useSnow = y > height*0.62;
-    for(let ix=-w/2;ix<w/2;ix+=step) for(let iz=-w/2;iz<w/2;iz+=step){
-      const edge = Math.max(Math.abs(ix),Math.abs(iz))/(w/2);
-      if(edge>0.95 && Math.random()<0.5) continue;
-      vox(g, cx+ix+step/2, y+1, cz+iz+step/2, step, 2.2, step, useSnow?M.snow:M.rock);
+  vox(g, cx,-1,cz, baseW+24,2,baseW+24, M.grass,false).castShadow=false; // grounding skirt
+  const layers=Math.ceil(height/4);
+  for(let l=0;l<layers;l++){
+    const y0=l*4, f=1-l/layers;
+    const w=Math.max(5, baseW*Math.pow(f,0.8));
+    const ox=((l*37)%5)-2, oz=((l*53)%5)-2; // deterministic jagged offsets
+    const snow=(y0/height)>0.55, wasSnow=((y0-4)/height)>0.55;
+    vox(g, cx+ox, y0+2, cz+oz, w, 4.4, w, snow?M.snow:M.rock).castShadow=false;
+    if(snow&&!wasSnow) vox(g, cx+ox, y0+0.6, cz+oz, w+5, 1.2, w+5, M.snow,false).castShadow=false; // snowline band
+    if(!snow&&w>20&&l%2===0){ // dark rock ribs for voxel texture
+      vox(g, cx+ox+w/2-1.5, y0+2, cz+oz, 3,4.4,7, M.stoneDark).castShadow=false;
+      vox(g, cx+ox-2, y0+2, cz+oz-w/2+2, 6,4.4,3, M.stoneDark).castShadow=false;
     }
-    w*=0.82;
-    if(w<2) break;
   }
-  // peak tip snow 1x1
-  vox(g,cx,height+2,cz,2,2,2,M.snow);
+  vox(g, cx,height+1.5,cz, 6,3,6, M.snow).castShadow=false; // summit
   peaks.push(g);
 }
-mountain(-38,-52,30,26); mountain(-8,-60,36,32); mountain(24,-55,28,24);
-mountain(52,-30,24,18); mountain(-58,-18,22,16); mountain(58,8,18,12); mountain(-55,18,16,10);
+mountain(0,-168,84,64); mountain(120,-115,64,52); mountain(168,-10,60,46); mountain(115,125,62,48);
+mountain(-95,175,60,44); mountain(-150,80,64,50); mountain(-172,-30,60,46); mountain(-110,-125,66,54);
+
+/* ---- Waterfall: cliff tower + animated sheet + surge + pool (north peak face) ---- */
+const fallSurge=[]; let fallTex=null, mistT=0;
+const fallWhiteM=mat(null,{color:0xffffff,transparent:true,opacity:0.75});
+function waterfall(){
+  const g=new THREE.Group(); world.add(g);
+  for(let y=0;y<40;y+=4){ // stepped cliff tower, face toward the sanctuary
+    const w=12-(y/40)*4;
+    vox(g, 0, y+2, -126, w, 4.4, 10, M.rock).castShadow=false;
+  }
+  vox(g, -8,3,-124, 5,6,7, M.leaf,false).castShadow=false; // mossy flanks
+  vox(g, 8,2.4,-125, 4,4.8,6, M.leaf,false).castShadow=false;
+  vox(g, 0,40.5,-121, 5,1.5,3, M.snow,false).castShadow=false; // snow source lip
+  fallTex=pixelTexture('#cfeaff',['#ffffff','#7cc4f2','#3f8fd1']);
+  const fallMat=new THREE.MeshLambertMaterial({ map:fallTex, transparent:true, opacity:0.88, emissive:0x9fd0ff, emissiveIntensity:0.35, emissiveMap:fallTex });
+  for(let y=2;y<38;y+=4){ // falling sheet
+    const w=new THREE.Mesh(BOX,fallMat); w.position.set(0,y+2,-120.6); w.scale.set(4.2,4.4,0.9); w.receiveShadow=true; g.add(w); voxelCount++;
+  }
+  for(let y=6;y<38;y+=8){ // static foam streaks
+    const s=new THREE.Mesh(BOX,fallWhiteM); s.position.set(-1.1,y+2,-120.0); s.scale.set(0.8,3.4,1.0); g.add(s); voxelCount++;
+    const s2=new THREE.Mesh(BOX,fallWhiteM); s2.position.set(1.2,y+4,-120.0); s2.scale.set(0.7,2.6,1.0); g.add(s2); voxelCount++;
+  }
+  vox(g, 0,39.3,-120.4, 6,1.4,2, M.white,false).castShadow=false; // lip foam
+  vox(g, 0,0.25,-116.5, 8,0.5,6, M.stoneDark,false).castShadow=false; // rock apron
+  vox(g, -2,0.8,-114.5, 2.2,0.7,1.6, M.white,false).castShadow=false; // base foam
+  vox(g, 1.8,0.7,-113.5, 2.6,0.6,1.8, M.white,false).castShadow=false;
+  vox(g, 0,0.3,-108, 12,0.6,9, M.water,false).castShadow=false; // plunge pool
+  vox(g, -6.8,0.35,-108, 1.6,0.7,9.5, M.sand,false).castShadow=false; // sandy rim
+  vox(g, 6.8,0.35,-108, 1.6,0.7,9.5, M.sand,false).castShadow=false;
+  vox(g, 0,0.35,-103, 11,0.7,1.8, M.sand,false).castShadow=false;
+  for(let i=0;i<3;i++){ // animated surge chunks sliding down
+    const s=new THREE.Mesh(BOX,fallWhiteM); s.scale.set(3.4,1.6,1.1); s.position.set(0,34-i*11,-120.3); g.add(s); voxelCount++;
+    fallSurge.push({m:s, off:i*11});
+  }
+}
+waterfall();
+
+/* ---- Creek: winding leading line from the falls pool to the pond ---- */
+function stream(){
+  const g=new THREE.Group(); world.add(g);
+  for(let z=-102; z<14; z+=4){
+    const x=2+Math.sin(z*0.055)*4;
+    vox(g, x,0.2,z, 3.2,0.5,4.2, M.water,false).castShadow=false;
+    if(((z/4)|0)%2===0){ vox(g, x-2.6,0.25,z, 1.2,0.5,2, M.sand,false).castShadow=false; vox(g, x+2.6,0.25,z, 1.2,0.5,2, M.sand,false).castShadow=false; }
+  }
+  vox(g, 2.5,0.9,4, 9,0.5,3, M.red).castShadow=false; // footbridge where it crosses the walk
+  vox(g, 2.5,1.7,2.7, 9,0.9,0.35, M.red).castShadow=false;
+  vox(g, 2.5,1.7,5.3, 9,0.9,0.35, M.red).castShadow=false;
+  vox(g, -1.5,0.8,2.7, 0.7,1.6,0.7, M.redDark).castShadow=false;
+  vox(g, 6.5,0.8,5.3, 0.7,1.6,0.7, M.redDark).castShadow=false;
+}
+stream();
 
 /* ---- Stone stepping pathway (1x1) ---- */
 function pathway(){
@@ -498,6 +551,7 @@ function cloud(x,y,z,s=1){
 }
 cloud(-30,30,-40,1.4); cloud(0,34,-50,1.8); cloud(30,28,-35,1.2);
 cloud(-45,26,-5,1.0); cloud(45,32,5,1.3); cloud(10,30,30,1.0);
+cloud(-60,36,-80,2); cloud(60,38,-70,2.2); cloud(0,40,90,1.6);
 
 /* ============ MICRO-VOXEL CHARACTERS (0.25) ============ */
 const u=0.25; // micro-voxel unit
@@ -594,7 +648,7 @@ function alpaca(x,z,c=0xd9b380,bnd){
 alpaca(-22,-4,0xd9b380); alpaca(-17,-7,0x8a6a4a);
 
 /* ---- Hand-built outer wilds (fixed designed layout, identical every load) ---- */
-const MOUNT_F=[[-38,-52,20],[-8,-60,23],[24,-55,19],[52,-30,17],[-58,-18,16],[58,8,14],[-55,18,13]];
+const MOUNT_F=[[0,-168,48],[120,-115,38],[168,-10,36],[115,125,37],[-95,175,36],[-150,80,38],[-172,-30,36],[-110,-125,39]];
 function wildClear(x,z){
   if(Math.hypot(x,z)<58) return false; // sanctuary core
   if(Math.abs(x)<64&&z>54&&z<182) return false; // maze grounds
@@ -710,6 +764,82 @@ function scatterWilds(){
 }
 scatterWilds();
 
+/* ---- Showpiece gardens, meadows, lanterns & small wildlife (fixed layout) ---- */
+function decoLantern(x,z){ // stone lantern glow, no extra light cost
+  const g=new THREE.Group(); g.position.set(x,0,z); world.add(g);
+  vox(g,0,0.9,0, 1.4,0.4,1.4, M.stoneDark,false);
+  vox(g,0,1.6,0, 0.6,1.0,0.6, M.stone,false);
+  vox(g,0,2.5,0, 1.3,0.8,1.3, M.stone,false);
+  vox(g,0,2.5,0, 0.9,0.5,0.9, mat(null,{color:0xffe2ae, emissive:0xff9a2e, ei:1.2}), false);
+  vox(g,0,3.2,0, 1.8,0.4,1.8, M.stoneDark,false);
+  vox(g,0,3.7,0, 1.0,0.5,1.0, M.stoneDark,false);
+}
+decoLantern(-2.2,20); decoLantern(2.2,20); decoLantern(-2.2,12); decoLantern(-2.2,4); decoLantern(-2.2,-4);
+function meadow(x,z){
+  const g=new THREE.Group(); g.position.set(x,0,z); world.add(g);
+  const cols=[0xff6b81,0xffd166,0xffffff,0xc084fc,0xff9ec6];
+  for(let i=0;i<14;i++){ const a=i*2.39996, r=2+((i*5)%9);
+    const ox=Math.cos(a)*r, oz=Math.sin(a)*r;
+    vox(g,ox,0.5,oz, 0.35,1.0,0.35, M.bamboo,false);
+    vox(g,ox,1.15,oz, 0.8,0.55,0.8, mat(null,{color:cols[i%5]}),false);
+  }
+  for(let i=0;i<8;i++){ const a=i*0.785+0.4, r=4+((i*3)%8);
+    vox(g,Math.cos(a)*r,0.4,Math.sin(a)*r, 0.5,0.9,0.5, i%2?M.leaf:M.grassDry,false);
+  }
+}
+meadow(-60,-60); meadow(60,-60); meadow(-60,40); meadow(100,-60); meadow(-80,120); meadow(40,-120);
+function bambooGarden(x,z){
+  const g=new THREE.Group(); g.position.set(x,0,z); world.add(g);
+  for(const e of [[-4.5,-4.5],[0,-4.5],[4.5,-4.5],[-4.5,0],[4.5,0],[-4.5,4.5],[0,4.5],[4.5,4.5]])
+    vox(g,e[0],0.25,e[1], 1.6,0.5,1.6, M.stone,false);
+  const offs=[[-2,-2],[2,-2],[-2,2],[2,2],[0,0],[-2.5,0.5]];
+  for(let i=0;i<offs.length;i++) wildBambooStalk(x+offs[i][0], z+offs[i][1], 17+(i%3)*2);
+  decoLantern(x+6.5,z+6.5); decoLantern(x-6.5,z-6.5);
+}
+bambooGarden(-100,20); bambooGarden(120,-60);
+{ // zen rock garden: raked sand, boulders, lantern
+  const g=new THREE.Group(); g.position.set(70,0,45); world.add(g);
+  vox(g,0,0.15,0, 14,0.3,10, M.sand,false);
+  for(let i=-2;i<=2;i++) vox(g,0,0.32,i*1.8, 13,0.06,0.25, mat(null,{color:0xc4ab72}),false);
+  wildRock(66,43,1.1); wildRock(73,47,0.9); wildRock(70,42,0.7);
+  decoLantern(76,49);
+}
+sakura(-8,26,1.1); sakura(8,26,1.1); // torii approach pair
+const ducks=[];
+function duck(x,z,r,sp,ph,c){
+  const g=new THREE.Group(); g.position.set(x,0.35,z); world.add(g);
+  const bm=mat(null,{color:c||0xffffff});
+  vox(g,0,0,0, 1.3,0.7,1.7, bm,false);
+  vox(g,0,0.55,0.9, 0.8,0.7,0.8, bm,false);
+  vox(g,0,0.45,1.4, 0.5,0.3,0.4, mat(null,{color:0xf59e0b}),false);
+  vox(g,-0.25,0.6,1.15, 0.15,0.15,0.1, mat(null,{color:0x222222}),false);
+  vox(g,0.25,0.6,1.15, 0.15,0.15,0.1, mat(null,{color:0x222222}),false);
+  ducks.push({g,cx:x,cz:z,r,sp,ph});
+}
+duck(6,9,2.5,0.5,0); duck(6,9,3.6,0.35,2,0xf3e3c3); duck(6,9,1.6,0.65,4,0xd9d9d9);
+const rabbits=[];
+function rabbit(x,z,cx,cz,r,sp,ph){
+  const g=new THREE.Group(); g.position.set(x,0,z); world.add(g);
+  const wm=mat(null,{color:0xf8f8f8});
+  vox(g,0,0.5,0, 1.0,0.8,1.3, wm,false);
+  vox(g,0,1.0,0.8, 0.7,0.6,0.7, wm,false);
+  vox(g,-0.2,1.6,0.7, 0.25,0.8,0.25, wm,false);
+  vox(g,0.2,1.6,0.7, 0.25,0.8,0.25, wm,false);
+  vox(g,0,0.5,-0.8, 0.4,0.4,0.3, wm,false);
+  rabbits.push({g,cx,cz,r,sp,ph});
+}
+rabbit(-24,8,-22,6,4,0.5,0); rabbit(-20,2,-19,1,3,0.6,3);
+const FLY_N=46;
+const flyGeo=new THREE.BufferGeometry();
+const flyPos=new Float32Array(FLY_N*3);
+const flyBase=[];
+for(let i=0;i<FLY_N;i++){ const a=(i/FLY_N)*Math.PI*2, r=25+((i*37)%95);
+  flyBase.push({x:Math.cos(a)*r, y:0.6+((i*13)%30)/10, z:Math.sin(a)*r*0.85, ph:i*1.7});
+}
+flyGeo.setAttribute('position', new THREE.BufferAttribute(flyPos,3));
+const flyMat=new THREE.PointsMaterial({ color:0xffe98a, size:0.85, transparent:true, opacity:0.1, depthWrite:false, blending:THREE.AdditiveBlending });
+const flies=new THREE.Points(flyGeo,flyMat); flies.frustumCulled=false; scene.add(flies);
+
 /* ---- Birds (flapping voxel wings) ---- */
 const birds=[];
 function bird(){
@@ -724,6 +854,7 @@ function bird(){
   birds.push(g);
 }
 for(let i=0;i<9;i++) bird();
+for(let i=0;i<6;i++) bird(); // extra distant flocks
 
 /* ---- Pink unicorn (chunky solid voxels, galloping around) ---- */
 const uniPink = mat(null,{color:0xff8ac2});
@@ -737,7 +868,7 @@ const uniGold = mat(TEX.gold, { emissive:0x7a5200, ei:0.5 });
 const uniHornTip = mat(null,{color:0xfff6c9, emissive:0xffd94d, ei:1.6});
 const uniEyeDark = mat(null,{color:0x1a1a22});
 const uniMouth = mat(null,{color:0x8a3b5e});
-const unicorn = new THREE.Group(); unicorn.scale.setScalar(0.85); world.add(unicorn); // alpaca-sized
+const unicorn = new THREE.Group(); unicorn.scale.setScalar(0.655); world.add(unicorn); // +10% — alpaca-sized
 const uniBody = new THREE.Group(); unicorn.add(uniBody);
 // solid barrel body + chest + rump (no gaps)
 big(uniBody, 0,4.6,0, 3.2,2.8,7.2, uniPink);
@@ -861,6 +992,7 @@ const CAMS={
   mountain:{ p:[0,10,34], t:[0,14,-55] },
   bird:{ p:[0,55,18], t:[0,0,-4] },
   bridge:{ p:[14,6,20], t:[6,1.5,10] },
+  falls:{ p:[0,10,-55], t:[0,20,-122] },
   unicorn:{ p:[-16,4.5,12.5], t:[-16,1.5,0.5] },
   panda:{ p:[24,5,-3], t:[18,1.5,-12] },
 };
@@ -919,14 +1051,13 @@ let playMode=false, uniAuto=true;
 const keys={};
 const UP=new THREE.Vector3(0,1,0);
 const uniVel={x:0,z:0};
-let uniVY=0, uniGrounded=true, uniSpeed=0, galPhase=0, dustT=0, uniGroundY=0, chaseDist=17, chaseH=10.5;
+let uniVY=0, uniGrounded=true, uniSpeed=0, galPhase=0, dustT=0, uniGroundY=0, chaseDist=19, chaseH=12.5;
 const _fwd=new THREE.Vector3(), _rgt=new THREE.Vector3(), _mv=new THREE.Vector3(), _prevU=new THREE.Vector3();
 _prevU.copy(unicorn.position);
-function dampAngle(a,b,l,dt){ let d=(b-a)%(Math.PI*2); if(d>Math.PI)d-=Math.PI*2; if(d<-Math.PI)d+=Math.PI*2; return a+d*Math.min(1,l*dt); }
 // solid colliders: rects [x0,z0,x1,z1] + circles [x,z,r]
 const COL_R=[[-9.5,-13,9.5,2],[-1,3,13,15]]; // pagoda platform, pond
 const COL_C=[[-3.6,20,1],[3.6,20,1],[-7,16,1],[7,16,1],[-6,-1,1],[6.5,-1,1],[-5.5,20,1],[5.5,20,1],
-  [-12,2,1.3],[14,-2,1.5],[-16,-10,1.2],[18,4,1.3],[-9,-16,1.4],[-38,-52,16],[-8,-60,19],[24,-55,15],[52,-30,13],[-58,-18,12],[58,8,10],[-55,18,9]]; // torii posts, lanterns, samurai, sakura trunks, mountains
+  [-12,2,1.3],[14,-2,1.5],[-16,-10,1.2],[18,4,1.3],[-9,-16,1.4],[0,-168,44],[120,-115,34],[168,-10,32],[115,125,33],[-95,175,32],[-150,80,34],[-172,-30,32],[-110,-125,35]]; // torii posts, lanterns, samurai, sakura trunks, mountains
 function collideUnicorn(){
   let px=unicorn.position.x, pz=unicorn.position.z;
   const lowY=unicorn.position.y<3.5; // fly over everything once airborne
@@ -1047,8 +1178,8 @@ function updateWings(dt,t){
   if(wingGrow<=0.001) return;
   const g=1-Math.pow(1-Math.min(1,wingGrow),3);
   const airborne=!uniGrounded||flying;
-  flapPhase+=dt*(airborne?14:(uniSpeed>1?10:2.5));
-  const amp=airborne?0.5:(uniSpeed>1?0.2:0.07);
+  flapPhase+=dt*(airborne?14:(Math.abs(uniSpeed)>1?10:2.5));
+  const amp=airborne?0.5:(Math.abs(uniSpeed)>1?0.2:0.07);
   const flap=Math.sin(flapPhase)*amp;
   const base=1.25+(0.12-1.25)*g, s=0.25+0.75*g;
   wingL.visible=wingR.visible=true;
@@ -1073,11 +1204,11 @@ function setPlay(on){
   if(on){
     const yaw=unicorn.rotation.y;
     _fwd.set(Math.sin(yaw),0,Math.cos(yaw));
-    camera.position.set(unicorn.position.x-_fwd.x*17, unicorn.position.y+10.5, unicorn.position.z-_fwd.z*17);
-    controls.target.set(unicorn.position.x, unicorn.position.y+2.6, unicorn.position.z);
+    camera.position.set(unicorn.position.x-_fwd.x*19, unicorn.position.y+12.5, unicorn.position.z-_fwd.z*19);
+    controls.target.set(unicorn.position.x, unicorn.position.y+3.4, unicorn.position.z);
     _prevU.copy(unicorn.position);
     uniVel.x=0; uniVel.z=0;
-    chaseDist=17; chaseH=10.5;
+    chaseDist=19; chaseH=12.5;
     uniGroundY=groundY(unicorn.position.x,unicorn.position.z);
     controls.minDistance=4; controls.maxDistance=30;
   } else {
@@ -1191,15 +1322,14 @@ function animate(){
       sparkT-=dt; if(sparkT<=0){ sparkT=0.12;
         puff(unicorn.position.x+(Math.random()-0.5)*3,unicorn.position.y+3.2,unicorn.position.z+(Math.random()-0.5)*3,1.2); } }
     if(keys.space)spaceHeld+=dt; else spaceHeld=0;
-    const ix=locked?0:((keys.d||keys.arrowright)?1:0)-((keys.a||keys.arrowleft)?1:0);
-    const iz=locked?0:((keys.w||keys.arrowup)?1:0)-((keys.s||keys.arrowdown)?1:0);
-    _mv.set(0,0,0).addScaledVector(_fwd,iz).addScaledVector(_rgt,ix);
+    const steer=locked?0:(((keys.a||keys.arrowleft)?1:0)-((keys.d||keys.arrowright)?1:0));
+    const throttle=locked?0:((keys.w||keys.arrowup)?1:0)-((keys.s||keys.arrowdown)?1:0);
     const maxSp=keys.shift?11:(flying?9.5:6.5);
-    if(_mv.lengthSq()>0.01){ _mv.normalize();
-      uniVel.x+=(_mv.x*maxSp-uniVel.x)*Math.min(1,dt*5);
-      uniVel.z+=(_mv.z*maxSp-uniVel.z)*Math.min(1,dt*5);
-      unicorn.rotation.y=dampAngle(unicorn.rotation.y,Math.atan2(uniVel.x,uniVel.z),10,dt);
-    } else { uniVel.x-=uniVel.x*Math.min(1,dt*6); uniVel.z-=uniVel.z*Math.min(1,dt*6); }
+    const targetSp=throttle>0?maxSp:(throttle<0?-2.5:0);
+    uniSpeed+=(targetSp-uniSpeed)*Math.min(1,dt*(targetSp!==0?3.5:5));
+    unicorn.rotation.y+=steer*2.4*dt*Math.min(1,Math.abs(uniSpeed)/2+0.3); // steer the ride
+    uniVel.x=Math.sin(unicorn.rotation.y)*uniSpeed;
+    uniVel.z=Math.cos(unicorn.rotation.y)*uniSpeed;
     unicorn.position.x+=uniVel.x*dt; unicorn.position.z+=uniVel.z*dt;
     uniGroundY+=(groundY(unicorn.position.x,unicorn.position.z)-uniGroundY)*Math.min(1,dt*8);
     if(crowned&&flying){ // level 2 flight: hold space to rise, release to glide
@@ -1215,9 +1345,9 @@ function animate(){
       if(crowned&&uniGrounded&&keys.space&&spaceHeld>0.28){ flying=true; uniGrounded=false; uniVY=Math.max(uniVY,3.5); blip(1568); }
     }
     collideUnicorn();
-    uniSpeed=Math.hypot(uniVel.x,uniVel.z);
-    const sf=Math.min(1,uniSpeed/3);
-    galPhase+=dt*(3+uniSpeed*1.7);
+    const spd=Math.abs(uniSpeed);
+    const sf=Math.min(1,spd/3);
+    galPhase+=dt*(3+spd*1.7);
     uniLegs[0].rotation.x=Math.sin(galPhase)*0.95*sf;
     uniLegs[3].rotation.x=Math.sin(galPhase)*0.95*sf;
     uniLegs[1].rotation.x=Math.sin(galPhase+Math.PI)*0.95*sf;
@@ -1228,7 +1358,7 @@ function animate(){
     uniHead.rotation.y=Math.sin(t*0.9)*0.15;
     uniHead.rotation.x=sf>0.15?Math.sin(galPhase+1)*0.12*sf:0.45+Math.sin(t*2.2)*0.12; // graze when idle
     dustT-=dt;
-    if(uniSpeed>5&&uniGrounded&&dustT<=0){ dustT=0.09;
+    if(spd>5&&uniGrounded&&dustT<=0){ dustT=0.09;
       const bx=unicorn.position.x-Math.sin(unicorn.rotation.y)*2, bz=unicorn.position.z-Math.cos(unicorn.rotation.y)*2;
       puff(bx+(Math.random()-0.5),unicorn.position.y+0.15,bz+(Math.random()-0.5),1.4); }
     for(const s of stars){ if(s.taken)continue;
@@ -1264,14 +1394,14 @@ function animate(){
     } else { // third-person: damped chase cam locked behind the unicorn
       _fwd.set(Math.sin(unicorn.rotation.y),0,Math.cos(unicorn.rotation.y));
       const inMaze=mazeActive&&Math.abs(unicorn.position.x)<62&&unicorn.position.z>56&&unicorn.position.z<180&&unicorn.position.y<8;
-      chaseDist+=((inMaze?9.5:17)-chaseDist)*Math.min(1,dt*2); // tuck in close inside the maze
-      chaseH+=((inMaze?6.5:10.5)-chaseH)*Math.min(1,dt*2);
+      chaseDist+=((inMaze?9.5:19)-chaseDist)*Math.min(1,dt*2); // tuck in close inside the maze
+      chaseH+=((inMaze?6.5:12.5)-chaseH)*Math.min(1,dt*2);
       _mv.set(unicorn.position.x-_fwd.x*chaseDist, unicorn.position.y+chaseH, unicorn.position.z-_fwd.z*chaseDist);
-      camera.position.lerp(_mv,1-Math.exp(-3.2*dt));
-      _mv.set(unicorn.position.x,unicorn.position.y+2.6,unicorn.position.z);
-      controls.target.lerp(_mv,1-Math.exp(-6*dt));
+      camera.position.lerp(_mv,1-Math.exp(-10*dt)); // locked behind: tracks faster than turns
+      _mv.set(unicorn.position.x,unicorn.position.y+3.4,unicorn.position.z);
+      controls.target.lerp(_mv,1-Math.exp(-10*dt));
     }
-    const wantFov=fpView?(uniSpeed>7?62:55):(uniSpeed>7?57:50); // speed FOV kick
+    const wantFov=fpView?(spd>7?62:55):(spd>7?57:50); // speed FOV kick
     if(Math.abs(camera.fov-wantFov)>0.05){ camera.fov+=(wantFov-camera.fov)*Math.min(1,dt*3); camera.updateProjectionMatrix(); }
   } else if(uniAuto){
   // pink unicorn: meadow gallop loop on open grass (avoids pagoda/pond) + leg swing
@@ -1355,8 +1485,21 @@ function animate(){
     dummy.updateMatrix(); petalMesh.setMatrixAt(i,dummy.matrix);
   }
   petalMesh.instanceMatrix.needsUpdate=true;
-  // water shimmer
+  // water shimmer + waterfall life
   M.water.opacity=0.78+Math.sin(t*2)*0.06;
+  if(fallTex) fallTex.offset.y-=dt*1.4;
+  for(const s of fallSurge){ s.off+=dt*9; if(s.off>34)s.off=0; s.m.position.y=36-s.off; }
+  mistT-=dt; if(mistT<=0){ mistT=0.45; puff((Math.random()-0.5)*4, 1.2, -110+(Math.random()-0.5)*3, 2.2); }
+  for(const d of ducks){ const a=t*d.sp+d.ph; // pond ducks circling
+    d.g.position.set(d.cx+Math.cos(a)*d.r, 0.35+Math.sin(t*3+d.ph)*0.08, d.cz+Math.sin(a)*d.r*0.7);
+    d.g.rotation.y=Math.atan2(-Math.sin(a)*d.r, Math.cos(a)*d.r*0.7); }
+  for(const b of rabbits){ const a=t*b.sp+b.ph; // meadow rabbits hopping loops
+    b.g.position.set(b.cx+Math.cos(a)*b.r, Math.abs(Math.sin(t*6+b.ph))*0.7, b.cz+Math.sin(a)*b.r);
+    b.g.rotation.y=Math.atan2(-Math.sin(a)*b.r, Math.cos(a)*b.r); }
+  for(let i=0;i<FLY_N;i++){ const f=flyBase[i]; // fireflies drift, glow after dark
+    flyPos[i*3]=f.x+Math.sin(t*0.6+f.ph)*1.5; flyPos[i*3+1]=f.y+Math.sin(t*1.1+f.ph)*0.5; flyPos[i*3+2]=f.z+Math.cos(t*0.5+f.ph)*1.5; }
+  flyGeo.attributes.position.needsUpdate=true;
+  flyMat.opacity=THREE.MathUtils.clamp((cur.lan-4)/20,0.05,0.95);
 
   // camera tween
   if(camTween){
