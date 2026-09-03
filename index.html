@@ -1119,6 +1119,10 @@ function blip(f=1320){ if(!audioOn||!AC||AC.state!=='running')return;
 // maze quest: level 2 (spawns south at 10 stars, crown grants wings + flight)
 let sparkT=0, spaceHeld=0;
 let mazeActive=false, crowned=false, cinematicT=0, toastTimer=0, wingGrow=0, flapPhase=0, flying=false;
+let tiaraEarned=false, pandaMode=false, ringIdx=0, ringSparkT=0; // level 3: alicorn ring trial -> tiara -> panda
+const RING_SPOTS=[[0,12,52],[-28,12,28],[-40,14,0],[-28,15,-26],[-2,16,-36],[24,15,-26],[36,13,0],[24,12,26]];
+const ringMeshes=[]; let tiaraG=null;
+let pandaBody=null, pandaHead=null, pandaTail=null, pandaWingL=null, pandaWingR=null; const pandaLegs=[];
 const MAZE_COL=[]; const hedges=[]; let crownG=null;
 const mazeGroup=new THREE.Group(); world.add(mazeGroup);
 const MZ={cx:0,cz:118,pitch:6}; // 9x9 cells, 6-wide lanes, far south end
@@ -1131,6 +1135,90 @@ function buildCrown(){
   big(c, 0,0.85,0, 0.45,1.1,0.45, uniGold, false);
   big(c, 0,0.1,1.12, 0.5,0.5,0.2, mat(null,{color:0xe0344a,emissive:0x7a0e1e,ei:1.2}), false);
   return c;
+}
+function buildTiara(){ // dainty silver tiara with pink gems: the ring-trial prize
+  const c=new THREE.Group();
+  const silv=mat(null,{color:0xe9eef7,emissive:0x91a7cc,ei:0.5});
+  const gem=mat(null,{color:0xff6fa5,emissive:0x8f1038,ei:1.4});
+  big(c, 0,0,0, 1.9,0.45,1.9, silv);
+  for(const sx of [-0.65,0,0.65]){ big(c, sx,0.55,0.75, 0.3,0.7,0.3, silv, false); big(c, sx,0.95,0.75, 0.34,0.3,0.34, gem, false); }
+  big(c, 0,0.15,0.97, 0.4,0.4,0.15, gem, false);
+  return c;
+}
+const ringIdleM=mat(null,{color:0xc9a24d,emissive:0x5e430a,ei:0.5});
+const ringLiveM=mat(null,{color:0xffd166,emissive:0xa86e00,ei:1.1});
+const ringDoneM=mat(null,{color:0x7bf0b2,emissive:0x0d7a44,ei:0.9});
+function buildSkyRings(){ // level 2 alicorn obstacle: golden sky rings flown in order
+  for(let i=0;i<RING_SPOTS.length;i++){
+    const sp=RING_SPOTS[i];
+    const m=new THREE.Mesh(new THREE.TorusGeometry(3.4,0.55,8,22), i===0?ringLiveM:ringIdleM);
+    m.position.set(sp[0],sp[1],sp[2]);
+    const nx=RING_SPOTS[(i+1)%RING_SPOTS.length]; m.lookAt(nx[0],sp[1],nx[2]);
+    world.add(m);
+    const gem=new THREE.Mesh(new THREE.OctahedronGeometry(0.55), ringLiveM);
+    gem.position.copy(m.position); world.add(gem);
+    ringMeshes.push({m, gem, baseY:sp[1], passed:false, ph:Math.random()*9});
+  }
+}
+function animRings(t,dt){ // pulse the live ring, spin the rest, sparkle the course
+  for(let i=0;i<ringMeshes.length;i++){
+    const r=ringMeshes[i]; if(!r) continue;
+    r.m.position.y=r.baseY+Math.sin(t*1.6+r.ph)*0.35; r.gem.position.y=r.m.position.y;
+    r.m.rotation.z+=dt*(r.passed?0.4:(i===ringIdx?1.2:0.25)); r.gem.rotation.y+=dt*2;
+    const s=(i===ringIdx&&!r.passed)?1+Math.sin(t*4)*0.06:1; r.m.scale.setScalar(s);
+  }
+  if(crowned&&!pandaMode&&ringIdx<ringMeshes.length){ ringSparkT-=dt;
+    if(ringSparkT<=0){ ringSparkT=0.45; const r=ringMeshes[ringIdx];
+      puff(r.m.position.x+(Math.random()-0.5)*4, r.m.position.y+(Math.random()-0.5)*4, r.m.position.z+(Math.random()-0.5)*4, 0.9); } }
+}
+function buildPandaPlayer(){ // chunky playable panda: same footprint as the unicorn ride
+  pandaBody=new THREE.Group(); pandaBody.visible=false; unicorn.add(pandaBody);
+  big(pandaBody, 0,4.0,0, 4.4,3.6,6.2, M.wool);
+  big(pandaBody, 0,5.6,-0.8, 3.6,0.8,3.0, pandaBlack, false); // shoulder saddle
+  function pleg(lx,lz){ const p=new THREE.Group(); p.position.set(lx,2.6,lz); pandaBody.add(p);
+    big(p, 0,-1.2,0, 1.4,2.6,1.4, pandaBlack); return p; }
+  pandaLegs.push(pleg(-1.4,2.2),pleg(1.4,2.2),pleg(-1.4,-2.2),pleg(1.4,-2.2));
+  big(pandaBody, -2.4,4.2,1.8, 1.2,2.2,1.2, pandaBlack, false); // arms
+  big(pandaBody, 2.4,4.2,1.8, 1.2,2.2,1.2, pandaBlack, false);
+  pandaTail=new THREE.Group(); pandaTail.position.set(0,4.6,-3.2); pandaBody.add(pandaTail);
+  big(pandaTail, 0,0,0, 1.0,1.0,0.8, M.wool, false);
+  pandaHead=new THREE.Group(); pandaHead.position.set(0,6.6,3.4); pandaBody.add(pandaHead);
+  big(pandaHead, 0,0.4,0, 3.2,2.8,2.8, M.wool); // round skull
+  big(pandaHead, -1.25,-0.5,0.9, 1.0,1.0,1.0, M.wool, false); // chubby cheeks
+  big(pandaHead, 1.25,-0.5,0.9, 1.0,1.0,1.0, M.wool, false);
+  big(pandaHead, -1.55,1.9,-0.2, 1.15,1.15,0.8, pandaBlack, false); // round ears
+  big(pandaHead, 1.55,1.9,-0.2, 1.15,1.15,0.8, pandaBlack, false);
+  big(pandaHead, -0.88,0.55,1.3, 1.0,1.2,0.35, pandaBlack, false); // eye patches
+  big(pandaHead, 0.88,0.55,1.3, 1.0,1.2,0.35, pandaBlack, false);
+  big(pandaHead, -0.88,0.6,1.5, 0.5,0.55,0.15, M.white, false); // eyes
+  big(pandaHead, 0.88,0.6,1.5, 0.5,0.55,0.15, M.white, false);
+  big(pandaHead, -0.88,0.55,1.6, 0.26,0.3,0.1, uniEyeDark, false);
+  big(pandaHead, 0.88,0.55,1.6, 0.26,0.3,0.1, uniEyeDark, false);
+  big(pandaHead, 0,-0.35,1.6, 0.65,0.5,0.4, pandaBlack, false); // nose
+  big(pandaHead, 0,-0.8,1.5, 1.0,0.22,0.3, pandaBlack, false); // mouth
+  big(pandaBody, 2.4,3.0,2.6, 0.4,2.8,0.4, M.bamboo, false); // bamboo snack
+  big(pandaBody, 2.4,4.3,2.6, 0.9,0.7,0.9, M.leaf, false);
+  pandaWingL=new THREE.Group(); pandaWingL.position.set(-2.2,5.6,-1.0); pandaBody.add(pandaWingL);
+  big(pandaWingL, -0.9,0.2,0, 1.8,0.4,0.9, M.white);
+  big(pandaWingL, -1.9,0.0,0, 1.6,0.3,1.1, uniPink, false);
+  pandaWingR=new THREE.Group(); pandaWingR.position.set(2.2,5.6,-1.0); pandaBody.add(pandaWingR);
+  big(pandaWingR, 0.9,0.2,0, 1.8,0.4,0.9, M.white);
+  big(pandaWingR, 1.9,0.0,0, 1.6,0.3,1.1, uniPink, false);
+}
+function earnTiara(){ // final ring threaded: tiara prize + panda transformation, level 3
+  tiaraEarned=true; pandaMode=true;
+  buildPandaPlayer();
+  uniBody.visible=false; pandaBody.visible=true;
+  uniHead.remove(crownG); pandaHead.add(crownG); crownG.position.set(0,1.75,0.4); crownG.rotation.set(0,0,0);
+  tiaraG=buildTiara(); pandaHead.add(tiaraG); tiaraG.position.set(0,1.1,1.55); tiaraG.rotation.x=-0.25;
+  wingGrow=Math.max(wingGrow,1);
+  const lb=document.getElementById('levelBadge');
+  lb.textContent='🐼 Lv 3 Panda'; lb.classList.remove('bg-amber-400','text-amber-950'); lb.classList.add('bg-emerald-300','text-emerald-950');
+  document.getElementById('objective').textContent='🐼 Level 3 PANDA — tiara earned! Explore the sanctuary!';
+  showToast('<div style="font-size:56px">🐼</div><b style="font-size:28px">LEVEL 3 UNLOCKED!</b><br><span>The alicorn earns a tiara and becomes a panda!</span>',6);
+  document.getElementById('playBtn').innerHTML=playMode?'⏹️ Exit Panda (Esc)':'🐼 Play as Panda';
+  for(let i=0;i<6;i++) puff(unicorn.position.x+(Math.random()-0.5)*6, unicorn.position.y+3+Math.random()*3, unicorn.position.z+(Math.random()-0.5)*6, 1.6);
+  blip(1046); blip(1318); blip(1568);
 }
 function buildMaze(){
   const N=19, grid=[];
@@ -1182,10 +1270,12 @@ function updateWings(dt,t){
   const amp=airborne?0.5:(Math.abs(uniSpeed)>1?0.2:0.07);
   const flap=Math.sin(flapPhase)*amp;
   const base=1.25+(0.12-1.25)*g, s=0.25+0.75*g;
-  wingL.visible=wingR.visible=true;
-  wingL.scale.setScalar(s); wingR.scale.setScalar(s);
-  wingL.rotation.z=base+flap; wingR.rotation.z=-base-flap;
-  wingL.rotation.y=0.3*(1-g); wingR.rotation.y=-0.3*(1-g);
+  const WL=pandaMode?pandaWingL:wingL, WR=pandaMode?pandaWingR:wingR;
+  if(!WL||!WR) return;
+  WL.visible=WR.visible=true;
+  WL.scale.setScalar(s); WR.scale.setScalar(s);
+  WL.rotation.z=base+flap; WR.rotation.z=-base-flap;
+  WL.rotation.y=0.3*(1-g); WR.rotation.y=-0.3*(1-g);
 }
 function showToast(html,dur){ document.getElementById('toastBody').innerHTML=html;
   document.getElementById('levelToast').style.display='flex'; toastTimer=dur||4; }
@@ -1348,15 +1438,17 @@ function animate(){
     const spd=Math.abs(uniSpeed);
     const sf=Math.min(1,spd/3);
     galPhase+=dt*(3+spd*1.7);
-    uniLegs[0].rotation.x=Math.sin(galPhase)*0.95*sf;
-    uniLegs[3].rotation.x=Math.sin(galPhase)*0.95*sf;
-    uniLegs[1].rotation.x=Math.sin(galPhase+Math.PI)*0.95*sf;
-    uniLegs[2].rotation.x=Math.sin(galPhase+Math.PI)*0.95*sf;
-    uniBody.position.y=Math.abs(Math.sin(galPhase))*0.5*sf;
-    uniBody.rotation.x=Math.sin(galPhase)*0.035*sf;
-    uniTail.rotation.x=0.6+Math.sin(t*7)*0.4;
-    uniHead.rotation.y=Math.sin(t*0.9)*0.15;
-    uniHead.rotation.x=sf>0.15?Math.sin(galPhase+1)*0.12*sf:0.45+Math.sin(t*2.2)*0.12; // graze when idle
+    const _legs=pandaMode?pandaLegs:uniLegs, _bd=pandaMode?pandaBody:uniBody;
+    const _hd=pandaMode?pandaHead:uniHead, _tl=pandaMode?pandaTail:uniTail;
+    _legs[0].rotation.x=Math.sin(galPhase)*0.95*sf;
+    _legs[3].rotation.x=Math.sin(galPhase)*0.95*sf;
+    _legs[1].rotation.x=Math.sin(galPhase+Math.PI)*0.95*sf;
+    _legs[2].rotation.x=Math.sin(galPhase+Math.PI)*0.95*sf;
+    _bd.position.y=Math.abs(Math.sin(galPhase))*0.5*sf;
+    _bd.rotation.x=Math.sin(galPhase)*0.035*sf;
+    _tl.rotation.x=0.6+Math.sin(t*7)*0.4;
+    _hd.rotation.y=Math.sin(t*0.9)*0.15;
+    _hd.rotation.x=sf>0.15?Math.sin(galPhase+1)*0.12*sf:0.45+Math.sin(t*2.2)*0.12; // graze when idle
     dustT-=dt;
     if(spd>5&&uniGrounded&&dustT<=0){ dustT=0.09;
       const bx=unicorn.position.x-Math.sin(unicorn.rotation.y)*2, bz=unicorn.position.z-Math.cos(unicorn.rotation.y)*2;
@@ -1373,10 +1465,23 @@ function animate(){
       if(cdx*cdx+cdz*cdz<5.8&&unicorn.position.y<5){
         crowned=true; cinematicT=4.5; wingGrow=0.0001; flapPhase=0; flying=false;
         uniHead.add(crownG); crownG.position.set(0,0.95,0.1); crownG.rotation.set(0,0,0);
-        document.getElementById('levelBadge').classList.remove('hidden');
-        document.getElementById('objective').textContent='👑 Level 2 — hold SPACE to fly!';
-        showToast('<div style="font-size:56px">👑</div><b style="font-size:28px">LEVEL 2 UNLOCKED!</b><br><span>Wings are sprouting…</span><br><b>Hold SPACE to fly!</b>',6);
+        buildSkyRings();
+        const lb2=document.getElementById('levelBadge'); lb2.classList.remove('hidden'); lb2.textContent='🦄🪽 Lv 2 Alicorn';
+        document.getElementById('objective').textContent='✨ ALICORN Level 2 — hold SPACE to fly! Thread the 8 sky rings!';
+        showToast('<div style="font-size:56px">👑</div><b style="font-size:28px">LEVEL 2 UNLOCKED · ALICORN!</b><br><span>Wings are sprouting…</span><br><b>Hold SPACE to fly, thread the sky rings to earn a tiara!</b>',6);
         blip(1568);
+      }
+    }
+    if(crowned&&!pandaMode&&ringIdx<RING_SPOTS.length){ // alicorn trial: thread the sky rings in order
+      const rg=RING_SPOTS[ringIdx];
+      const rdx=rg[0]-unicorn.position.x, rdy=rg[1]-unicorn.position.y, rdz=rg[2]-unicorn.position.z;
+      if(rdx*rdx+rdy*rdy+rdz*rdz<11){
+        const rm=ringMeshes[ringIdx]; rm.passed=true; rm.m.material=ringDoneM; rm.gem.visible=false; ringIdx++;
+        for(let i=0;i<3;i++) puff(rg[0],rg[1],rg[2],1.4);
+        if(ringIdx>=RING_SPOTS.length){ earnTiara(); }
+        else { ringMeshes[ringIdx].m.material=ringLiveM;
+          document.getElementById('objective').textContent=`✨ Alicorn rings ${ringIdx}/${RING_SPOTS.length} — thread the glowing ring!`;
+          blip(880+ringIdx*120); }
       }
     }
     if(locked){ // crowning cinematic: front camera framing the unicorn
@@ -1386,7 +1491,7 @@ function animate(){
       _mv.set(unicorn.position.x,unicorn.position.y+3.2,unicorn.position.z);
       controls.target.lerp(_mv,1-Math.exp(-4*dt));
     } else if(fpView){ // first-person ride cam glued to the head
-      uniHead.getWorldPosition(_fp);
+      (pandaMode?pandaHead:uniHead).getWorldPosition(_fp);
       _fwd.set(Math.sin(unicorn.rotation.y),0,Math.cos(unicorn.rotation.y));
       camera.position.set(_fp.x+_fwd.x*1.6, _fp.y+0.7, _fp.z+_fwd.z*1.6);
       controls.target.set(_fp.x+_fwd.x*12, _fp.y+0.4, _fp.z+_fwd.z*12);
@@ -1425,14 +1530,17 @@ function animate(){
   }
   } else { // parked after playing: idle graze where left
     unicorn.position.y+=((0.12+groundY(unicorn.position.x,unicorn.position.z))-unicorn.position.y)*Math.min(1,dt*4);
-    for(const l of uniLegs) l.rotation.x*=0.9;
-    uniBody.position.y*=0.9; uniBody.rotation.x*=0.9;
-    uniHead.rotation.x=0.45+Math.sin(t*2.2)*0.12;
-    uniHead.rotation.y=Math.sin(t*0.9)*0.15;
-    uniTail.rotation.x=0.6+Math.sin(t*7)*0.4;
+    const _pl=pandaMode?pandaLegs:uniLegs, _pb=pandaMode?pandaBody:uniBody;
+    const _ph=pandaMode?pandaHead:uniHead, _pt=pandaMode?pandaTail:uniTail;
+    for(const l of _pl) l.rotation.x*=0.9;
+    _pb.position.y*=0.9; _pb.rotation.x*=0.9;
+    _ph.rotation.x=0.45+Math.sin(t*2.2)*0.12;
+    _ph.rotation.y=Math.sin(t*0.9)*0.15;
+    _pt.rotation.x=0.6+Math.sin(t*7)*0.4;
   }
   updateWings(dt,t); // wings sway/flap in every mode once grown
   if(crownG&&!crowned){ crownG.rotation.y+=dt*1.5; crownG.position.y=2.6+Math.sin(t*2)*0.2; }
+  if(ringMeshes.length) animRings(t,dt); // sky-ring course shimmer
   if(mazeActive) for(const h of hedges){ if(h.p>=1) continue; // hedges rise with a ripple
     h.delay-=dt; if(h.delay>0) continue;
     h.p=Math.min(1,h.p+dt*0.7);
