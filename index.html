@@ -1238,7 +1238,7 @@ function earnTiara(){ // final ring threaded: tiara prize + panda transformation
   wingGrow=Math.max(wingGrow,1);
   const lb=document.getElementById('levelBadge');
   lb.textContent='🐼 Lv 3 Panda'; lb.classList.remove('bg-amber-400','text-amber-950'); lb.classList.add('bg-emerald-300','text-emerald-950');
-  showToast('<div style="font-size:56px">🐼</div><b style="font-size:28px">LEVEL 3 UNLOCKED!</b><br><span>The alicorn earns a tiara and becomes a panda!</span>',6);
+  showToastLater('<div style="font-size:56px">🐼</div><b style="font-size:28px">LEVEL 3 UNLOCKED!</b><br><span>The alicorn earns a tiara and becomes a panda!</span>',6,1.6);
   document.getElementById('playBtn').innerHTML=playMode?'⏹️ Exit Panda (Esc)':'🐼 Play as Panda';
   for(let i=0;i<6;i++) puff(unicorn.position.x+(Math.random()-0.5)*6, unicorn.position.y+3+Math.random()*3, unicorn.position.z+(Math.random()-0.5)*6, 1.6);
   blip(1046); blip(1318); blip(1568);
@@ -1296,8 +1296,7 @@ function startFinale(){ // mash won: inside the sakura pagoda the pot starts flo
   buildPot(); finaleLock=true; spinT=0; potT=0;
   addScore(hardMode?300:150);
   document.getElementById('objective').textContent='✨ Something magic is happening…';
-  showToast('<div style="font-size:52px">🏮</div><b style="font-size:24px">Inside the sakura pagoda…</b><br><span>The pot floats! The panda spins!</span>',3);
-  blip(1174);
+  blip(1174); // the LEVEL 4 toast lands when the spin ends — no text over the magic
 }
 function buildQueen(){ // the Sakura Queen: blossom gown, hair buns, her own petal wings
   queenBody=new THREE.Group(); queenBody.visible=false; unicorn.add(queenBody);
@@ -1338,8 +1337,7 @@ function buildQueen(){ // the Sakura Queen: blossom gown, hair buns, her own pet
 function startQueenSpin(){ // 3 baby stars: spin and spin into the Sakura Queen
   queenLock=true; queenT=0;
   document.getElementById('objective').textContent='🌸 Spinning…';
-  showToast('<div style="font-size:56px">🌸</div><b style="font-size:24px">The baby panda spins…</b><br><span>Petals gather…</span>',3);
-  blip(1318);
+  blip(1318); // the SAKURA QUEEN toast lands when the spin ends — no text over the magic
 }
 function becomeQueen(){ // hard mode: every challenge again, a bit tougher
   buildQueen();
@@ -1430,6 +1428,8 @@ function updateWings(dt,t){
 }
 function showToast(html,dur){ document.getElementById('toastBody').innerHTML=html;
   document.getElementById('levelToast').style.display='flex'; toastTimer=dur||4; }
+const toastQueue=[]; // big toasts wait until the animation finishes
+function showToastLater(html,dur,delay){ toastQueue.push({html,dur,t:delay}); }
 function setPlay(on){
   playMode=on; if(on) uniAuto=false;
   setView(false); // reset to third-person, restores horn/FOV/controls
@@ -1442,6 +1442,7 @@ function setPlay(on){
   controls.enableRotate=!on; controls.enablePan=!on; // chase cam owns the angle while playing
   camTween=null;
   for(const k in keys) keys[k]=false;
+  toastQueue.length=0; // never pop a delayed toast over the wrong scene
   if(on){
     const yaw=unicorn.rotation.y;
     _fwd.set(Math.sin(yaw),0,Math.cos(yaw));
@@ -1640,7 +1641,7 @@ function animate(){
         buildSkyRings();
         const lb2=document.getElementById('levelBadge'); lb2.classList.remove('hidden'); lb2.textContent='🦄🪽 Lv 2 Alicorn';
         document.getElementById('objective').textContent='✨ ALICORN Level 2 — hold SPACE to fly! Thread the 8 sky rings!';
-        showToast('<div style="font-size:56px">👑</div><b style="font-size:28px">LEVEL 2 UNLOCKED · ALICORN!</b><br><span>Wings are sprouting…</span><br><b>Hold SPACE to fly, thread the sky rings to earn a tiara!</b>',6);
+        showToastLater('<div style="font-size:56px">👑</div><b style="font-size:28px">LEVEL 2 UNLOCKED · ALICORN!</b><br><span>Wings are sprouting…</span><br><b>Hold SPACE to fly, thread the sky rings to earn a tiara!</b>',6,4.5);
         addScore(100);
         blip(1568);
       }
@@ -1843,6 +1844,8 @@ function animate(){
   renderer.render(scene,camera);
 
   if(toastTimer>0){ toastTimer-=dt; if(toastTimer<=0) document.getElementById('levelToast').style.display='none'; }
+  for(let i=toastQueue.length-1;i>=0;i--){ const q=toastQueue[i]; q.t-=dt;
+    if(q.t<=0){ toastQueue.splice(i,1); showToast(q.html,q.dur); } }
   // HUD
   fT+=dt; if(fT>0.5){ fT=0; fpsA=Math.round(1/Math.max(dt,1e-4));
     document.getElementById('statFps').textContent=fpsA;
