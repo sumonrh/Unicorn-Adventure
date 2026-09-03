@@ -17,6 +17,9 @@
   .scroll-thin::-webkit-scrollbar-thumb{background:rgba(255,255,255,.25);border-radius:99px}
   @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
   .floaty{animation:floaty 4s ease-in-out infinite}
+  body.ui-hidden .hidable{display:none!important}
+  #uiEye{display:none}
+  body.ui-hidden #uiEye{display:block}
 </style>
 <script type="importmap">
 { "imports": {
@@ -29,7 +32,7 @@
 <div id="scene"></div>
 
 <!-- Header -->
-<div class="fixed top-3 left-3 z-20 max-w-[220px]">
+<div class="fixed top-3 left-3 z-20 max-w-[220px] hidable">
   <div class="glass rounded-xl p-2.5 text-white">
     <div class="flex items-center gap-1.5">
       <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-red-500 to-amber-400 grid place-items-center text-base floaty">⛩️</div>
@@ -50,7 +53,7 @@
 </div>
 
 <!-- Time + Audio -->
-<div class="fixed top-3 right-3 z-20 w-56">
+<div class="fixed top-3 right-3 z-20 w-56 hidable">
   <div class="glass rounded-2xl p-3 text-white">
     <p class="text-[11px] font-bold tracking-widest uppercase text-white/70 mb-2">☀️ Time Mode</p>
     <div class="grid grid-cols-3 gap-1.5">
@@ -63,12 +66,16 @@
       <button id="rotBtn" class="btn rounded-xl px-3 py-2 text-xs font-bold bg-white/10 border border-white/20">🔁</button>
     </div>
     <input id="sunSlider" type="range" min="0" max="100" value="30" class="w-full mt-2.5 accent-amber-400" title="Sun position" />
+    <div class="mt-2 flex gap-1.5">
+      <button id="helpBtn" class="btn flex-1 rounded-xl px-2 py-1.5 text-xs font-bold bg-white/10 border border-white/20">❓ Help</button>
+      <button id="hideUiBtn" class="btn flex-1 rounded-xl px-2 py-1.5 text-xs font-bold bg-white/10 border border-white/20">👁️ Hide UI</button>
+    </div>
     <p class="text-[10px] text-white/50 mt-1">Drag slider for sun arc · Right-drag orbit · Scroll zoom</p>
   </div>
 </div>
 
 <!-- Camera presets -->
-<div class="fixed bottom-3 left-1/2 -translate-x-1/2 z-20 w-[min(96vw,860px)]">
+<div class="fixed bottom-3 left-1/2 -translate-x-1/2 z-20 w-[min(96vw,860px)] hidable">
   <div class="glass rounded-2xl px-3 py-2.5">
     <div class="flex gap-2 overflow-x-auto scroll-thin text-white text-xs font-bold">
       <button data-cam="pagoda" class="camBtn btn active whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">⛩️ Pagoda Front</button>
@@ -84,19 +91,18 @@
   </div>
 </div>
 
-<div id="gameHud" class="fixed top-3 left-1/2 -translate-x-1/2 z-20 hidden">
+<div id="gameHud" class="fixed top-3 left-1/2 -translate-x-1/2 z-20 hidden hidable">
   <div class="glass rounded-2xl px-4 py-2 text-white text-center whitespace-nowrap">
     <span class="font-extrabold">⭐ <span id="starCount">0</span> stars</span>
     <span class="font-extrabold ml-2">🏆 <span id="scoreVal">0</span></span>
     <button id="camThirdBtn" class="btn active rounded-lg px-2 py-1 text-xs font-bold bg-white/10 border border-white/20 ml-3">🎥 Third</button>
     <button id="camFirstBtn" class="btn rounded-lg px-2 py-1 text-xs font-bold bg-white/10 border border-white/20 ml-1">🦄 First</button>
-    <span class="text-white/60 text-xs ml-3">W run · A/D steer · S brake · Shift gallop · Space jump · V camera · Esc exit</span>
     <span id="levelBadge" class="hidden text-xs font-extrabold ml-2 px-2 py-0.5 rounded-lg bg-amber-400 text-amber-950">👑 Lv 2</span>
     <div id="objective" class="text-amber-200 text-xs mt-1">⭐ Collect 10 stars to reveal the maze</div>
   </div>
 </div>
 
-<div id="rideHud" style="display:none" class="fixed bottom-3 right-3 z-20">
+<div id="rideHud" style="display:none" class="fixed bottom-3 right-3 z-20 hidable">
   <div class="glass rounded-2xl px-4 py-2 text-white text-center">
     <div class="font-extrabold text-amber-300 text-sm">🌀 Mash SPACE!</div>
     <div id="rideCount" class="text-2xl font-extrabold">0/10</div>
@@ -120,9 +126,22 @@
   </div>
 </div>
 
-<div class="fixed bottom-3 left-3 z-20 hidden md:block">
-  <div class="glass rounded-2xl px-3 py-2 text-[11px] text-white/70">WASD / drag to orbit · <span class="text-white font-bold">3-tier Pagoda · Torii · Taiko Bridge · Samurai · Sheep & Alpaca · 🦄 Unicorn · 🐼 Pandas</span></div>
+<div id="helpModal" style="display:none" class="fixed inset-0 z-40 items-center justify-center">
+  <div class="glass rounded-3xl px-8 py-6 text-white max-w-md mx-4 max-h-[85vh] overflow-y-auto scroll-thin">
+    <div class="text-center" style="font-size:44px">⛩️</div>
+    <b class="block text-center" style="font-size:22px">How to Play</b>
+    <div class="text-sm mt-3 leading-relaxed space-y-2">
+      <p>🎮 <b>Ride:</b> W run · A/D steer · S brake · Shift gallop · Space jump · arrows work too</p>
+      <p>🪽 <b>Fly:</b> as alicorn or queen, hold SPACE to rise, release to glide</p>
+      <p>🎥 <b>Camera:</b> V toggles first/third person · drag to orbit while exploring · bottom buttons jump to views</p>
+      <p>⭐ <b>Quest:</b> stars → maze → crown → sky rings → tiara → bamboo → alicorn ride (mash SPACE!) → pot → baby → stars → Sakura Queen → everything again, harder → 🏆 YOU WON</p>
+      <p class="text-white/60 text-xs">Esc exits play · H hides the UI</p>
+    </div>
+    <button id="helpClose" class="btn w-full rounded-xl px-3 py-2 mt-4 text-sm font-extrabold bg-amber-400 text-amber-950">Got it!</button>
+  </div>
 </div>
+
+<button id="uiEye" class="btn fixed top-3 right-3 z-40 glass rounded-full w-10 h-10 text-lg text-white">👁️</button>
 
 <script type="module">
 import * as THREE from 'three';
@@ -1464,6 +1483,13 @@ function setPlay(on){
 }
 document.getElementById('playBtn').onclick=()=>setPlay(!playMode);
 document.getElementById('winAgain').onclick=()=>location.reload();
+function toggleHelp(force){ const m=document.getElementById('helpModal'); m.style.display=(force!==undefined?force:m.style.display!=='flex')?'flex':'none'; }
+function toggleUI(){ document.body.classList.toggle('ui-hidden'); }
+document.getElementById('helpBtn').onclick=()=>toggleHelp();
+document.getElementById('helpClose').onclick=()=>toggleHelp(false);
+document.getElementById('helpModal').onclick=e=>{ if(e.target.id==='helpModal') toggleHelp(false); };
+document.getElementById('hideUiBtn').onclick=()=>toggleUI();
+document.getElementById('uiEye').onclick=()=>toggleUI();
 // first- / third-person ride camera
 let fpView=false;
 const _fp=new THREE.Vector3();
@@ -1481,7 +1507,9 @@ document.getElementById('camFirstBtn').onclick=()=>setView(true);
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(playMode&&(k===' '||k.startsWith('arrow'))) e.preventDefault();
+  if(k==='escape'&&document.getElementById('helpModal').style.display==='flex'){ toggleHelp(false); return; }
   if(k==='escape'&&playMode){ setPlay(false); return; }
+  if(k==='h'){ toggleUI(); return; }
   if(k==='v'&&playMode){ setView(!fpView); return; }
   if(k==='enter'&&!playMode&&document.activeElement===document.body){ setPlay(true); return; }
   keys[k===' '?'space':k]=true;
