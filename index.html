@@ -120,7 +120,7 @@ container.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87b5d6);
-scene.fog = new THREE.Fog(0x87b5d6, 70, 220);
+scene.fog = new THREE.Fog(0x87b5d6, 100, 380);
 
 const camera = new THREE.PerspectiveCamera(50, innerWidth/innerHeight, 0.1, 600);
 camera.position.set(22, 14, 26);
@@ -253,6 +253,12 @@ function terrain(){
     if(Math.random()<0.18){ const bx=ix*4+1, bz=iz*4-1; // 2x2 hill bump
       vox(g, bx, 0.5, bz, 2,1,2, M.grassDry); BUMPS.push({x0:bx-1,x1:bx+1,z0:bz-1,z1:bz+1,top:1}); }
   }
+  // far field: giant 16x16 slabs ring out to 9x the area (radius ~192)
+  for(let ox=-12; ox<=12; ox++) for(let oz=-12; oz<=12; oz++){
+    const fx=ox*16+8, fz=oz*16+8, fd=Math.hypot(fx,fz);
+    if(fd<60||fd>192) continue;
+    vox(g, fx, -0.5, fz, 16, 1, 16, (ox+oz)%2===0?M.grass:M.grassDry).castShadow=false;
+  }
   // pond basin (carve visual: dirt rim + water)
   for(let ix=-3; ix<=3; ix++) for(let iz=1; iz<=6; iz++){
     vox(g, ix*2+6, 0.12, iz*2+2, 2, 0.25, 2, M.water, false);
@@ -260,9 +266,10 @@ function terrain(){
   // dirt rim
   for(let i=-4;i<=4;i++){ vox(g, i*2+6, 0.3, 3, 1.6,0.5,1, M.sand); vox(g, i*2+6, 0.3, 17, 1.6,0.5,1, M.sand); }
   // meadow 1x1 tufts + flowers
-  for(let i=0;i<220;i++){
-    const x=(Math.random()-0.5)*104, z=(Math.random()-0.5)*92-2;
+  for(let i=0;i<350;i++){
+    const x=(Math.random()-0.5)*360, z=(Math.random()-0.5)*340-2;
     if(Math.hypot(x-6,z-9)<7) continue;
+    if(Math.abs(x)<62&&z>56&&z<180) continue; // keep the maze clear
     if(Math.random()<0.7) vox(g,x,0.6,z,0.35,0.5,0.35,M.leaf,false);
     else vox(g,x,0.55,z,0.25,0.35,0.25, mat(null,{color:[0xff6b81,0xffd166,0xffffff][i%3]}),false);
   }
@@ -505,52 +512,44 @@ const samurais=[];
 function samurai(x,z,ry=0){
   const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=ry; world.add(g);
   const body=new THREE.Group(); g.add(body);
-  // legs (dark)
-  micro(body,-1,1,0, 1.6,2,1.6, M.helmet); micro(body,1,1,0, 1.6,2,1.6, M.helmet);
-  micro(body,-1,2.4,0, 1.8,1,1.8, M.woodDark); micro(body,1,2.4,0, 1.8,1,1.8, M.woodDark);
-  // Do armor (blue) + trim
-  micro(body,0,4.4,0, 4,3.6,2.6, M.armor);
-  micro(body,0,5.8,0, 4.2,0.6,2.8, M.armorTrim);
-  micro(body,0,3.2,0, 4.2,0.6,2.8, M.armorTrim);
-  micro(body,0,4.4,1.4, 2.4,2.6,0.4, mat(null,{color:0x1a2547})); // chest plate
-  // Sode shoulder guards
-  micro(body,-2.8,5.4,0, 1.8,2.4,2.8, M.armor);
-  micro(body, 2.8,5.4,0, 1.8,2.4,2.8, M.armor);
-  // arms + skin hands
-  micro(body,-2.8,3.4,0, 1.4,2.4,1.4, M.armor);
-  micro(body, 2.8,3.4,0, 1.4,2.4,1.4, M.armor);
-  micro(body,-2.8,2,0.2, 1.2,1,1.2, M.skin);
-  micro(body, 2.8,2,0.2, 1.2,1,1.2, M.skin);
-  // head skin
-  micro(body,0,7.4,0, 2.6,2.4,2.4, M.skin);
-  micro(body,-0.6,7.4,1.25, 0.5,0.5,0.2, mat(null,{color:0x111111}),false);
-  micro(body, 0.6,7.4,1.25, 0.5,0.5,0.2, mat(null,{color:0x111111}),false);
-  // Kabuto helmet + gold crescent crest
-  micro(body,0,9,0, 3,1.6,2.8, M.helmet);
-  micro(body,0,9.9,-0.6, 2,0.8,1.4, M.helmet);
-  micro(body,-1.8,10.2,0.6, 0.7,2.2,0.5, M.armorTrim,false); // crescent left
-  micro(body, 1.8,10.2,0.6, 0.7,2.2,0.5, M.armorTrim,false); // crescent right
-  micro(body,0,11.2,0.6, 3.4,0.5,0.5, M.armorTrim,false);
-  micro(body,-1,11.6,0.6, 0.6,0.8,0.5, M.armorTrim,false);
-  micro(body, 1,11.6,0.6, 0.6,0.8,0.5, M.armorTrim,false);
-  // Katana sheathed at side
-  const kat = new THREE.Group(); kat.position.set(-3.4*u,3.4*u,0.4); kat.rotation.z=0.5; body.add(kat);
-  micro(kat,0,0,0, 0.7,5.5,0.7, mat(null,{color:0x141414}));
-  micro(kat,0,3,0, 1.1,0.5,1.1, M.armorTrim,false);
-  // sandals
-  micro(body,-1,0.25,0.3, 1.8,0.5,2.4, M.woodDark);
-  micro(body, 1,0.25,0.3, 1.8,0.5,2.4, M.woodDark);
+  big(body, -0.55,0.15,0.2, 1.0,0.3,1.4, M.woodDark, false); // sandals
+  big(body, 0.55,0.15,0.2, 1.0,0.3,1.4, M.woodDark, false);
+  big(body, -0.55,0.8,0, 1.0,1.6,1.0, M.helmet); // legs
+  big(body, 0.55,0.8,0, 1.0,1.6,1.0, M.helmet);
+  big(body, 0,1.9,0, 2.2,1.0,1.6, M.armor); // hakama skirt
+  big(body, 0,3.1,0, 2.4,2.0,1.8, M.armor); // do cuirass
+  big(body, 0,3.1,0.95, 1.6,1.6,0.3, M.helmet, false); // chest plate
+  big(body, 0,4.0,0, 2.5,0.35,1.9, M.armorTrim, false); // gold bands
+  big(body, 0,2.3,0, 2.3,0.3,1.7, M.armorTrim, false);
+  big(body, -1.65,3.9,0, 1.0,1.4,1.8, M.armor); // sode shoulder guards
+  big(body, 1.65,3.9,0, 1.0,1.4,1.8, M.armor);
+  big(body, -1.65,2.7,0, 0.8,1.4,0.8, M.armor); // arms
+  big(body, 1.65,2.7,0, 0.8,1.4,0.8, M.armor);
+  big(body, -1.65,1.85,0.1, 0.7,0.5,0.7, M.skin, false); // hands
+  big(body, 1.65,1.85,0.1, 0.7,0.5,0.7, M.skin, false);
+  big(body, 0,4.9,0.2, 1.5,1.3,1.4, M.skin); // head
+  big(body, -0.35,5.0,0.92, 0.3,0.3,0.15, M.helmet, false); // eyes
+  big(body, 0.35,5.0,0.92, 0.3,0.3,0.15, M.helmet, false);
+  big(body, 0,5.85,0.1, 1.7,0.9,1.7, M.helmet); // kabuto helmet
+  big(body, 0,6.35,-0.4, 1.2,0.5,0.8, M.helmet, false);
+  big(body, -1.0,6.6,0.5, 0.35,1.2,0.3, M.armorTrim, false); // golden crescent crest
+  big(body, 1.0,6.6,0.5, 0.35,1.2,0.3, M.armorTrim, false);
+  big(body, 0,7.15,0.5, 2.2,0.3,0.3, M.armorTrim, false);
+  const kat=new THREE.Group(); kat.position.set(-1.9*V,2.6*V,0.3); kat.rotation.z=0.45; body.add(kat); // katana
+  big(kat, 0,0,0, 0.5,4.2,0.5, M.helmet);
+  big(kat, 0,2.2,0, 0.8,0.4,0.8, M.armorTrim, false);
+  big(kat, 0,-2.2,0, 0.6,0.4,0.6, M.woodDark, false);
   g.userData={ body, ph:Math.random()*9 };
   samurais.push(g);
   return g;
 }
-samurai(-3.2,13.5,0.35); samurai(3.2,13.5,-0.35);
+samurai(-5.5,20,0.3); samurai(5.5,20,-0.3);
 
 /* ---- Sheep (chunky solid voxels, no gaps) ---- */
 const animals=[];
 const sheepDark=mat(null,{color:0x3a3a3a});
 const sheepEye=mat(null,{color:0x14141c});
-function sheep(x,z){
+function sheep(x,z,bnd){
   const g=new THREE.Group(); g.position.set(x,0,z); world.add(g);
   const b=new THREE.Group(); g.add(b);
   for(const sx of [-0.9,0.9]) for(const sz of [-1.2,1.2]) big(b, sx,0.8,sz, 0.9,1.6,0.9, sheepDark); // legs to ground
@@ -565,12 +564,12 @@ function sheep(x,z){
   big(head, 0.85,0.3,-0.2, 0.5,0.6,0.5, sheepDark, false);
   for(const s of [-1,1]){ big(head, s*0.35,0.25,1.0, 0.3,0.35,0.15, M.white, false); big(head, s*0.35,0.22,1.08, 0.15,0.18,0.08, sheepEye, false); }
   big(head, 0,-0.45,0.95, 0.5,0.25,0.2, sheepDark, false); // mouth
-  g.userData={ b, head, ph:Math.random()*9, t:0, tx:x, tz:z, mode:'walk', timer:Math.random()*4 };
+  g.userData={ b, head, ph:Math.random()*9, t:0, tx:x, tz:z, mode:'walk', timer:Math.random()*4, bnd };
   animals.push(g);
 }
 sheep(-16,6); sheep(-19,2); sheep(-13,0);
 /* ---- Alpacas (chunky solid voxels, long neck + ears) ---- */
-function alpaca(x,z,c=0xd9b380){
+function alpaca(x,z,c=0xd9b380,bnd){
   const g=new THREE.Group(); g.position.set(x,0,z); world.add(g);
   const b=new THREE.Group(); g.add(b);
   const fur=mat(null,{color:c});
@@ -589,10 +588,127 @@ function alpaca(x,z,c=0xd9b380){
     big(head, s*0.55,1.5,-0.1, 0.5,1.2,0.5, fur, false); // tall ears
   }
   big(head, 0,1.3,-0.4, 1.6,0.8,1.0, M.wool, false); // fluffy topknot
-  g.userData={ b, head, ph:Math.random()*9, t:0, tx:x, tz:z, mode:'walk', timer:Math.random()*4 };
+  g.userData={ b, head, ph:Math.random()*9, t:0, tx:x, tz:z, mode:'walk', timer:Math.random()*4, bnd };
   animals.push(g);
 }
 alpaca(-22,-4,0xd9b380); alpaca(-17,-7,0x8a6a4a);
+
+/* ---- Hand-built outer wilds (fixed designed layout, identical every load) ---- */
+const MOUNT_F=[[-38,-52,20],[-8,-60,23],[24,-55,19],[52,-30,17],[-58,-18,16],[58,8,14],[-55,18,13]];
+function wildClear(x,z){
+  if(Math.hypot(x,z)<58) return false; // sanctuary core
+  if(Math.abs(x)<64&&z>54&&z<182) return false; // maze grounds
+  for(const m of MOUNT_F){ if(Math.hypot(x-m[0],z-m[1])<m[2]+3) return false; }
+  return true;
+}
+const mapleM=mat(null,{color:0xe07020});
+const mapleRedM=mat(null,{color:0xc03028});
+function wildTree(x,z,kind,s){
+  const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=(x*0.7+z*1.3)%6.28; g.scale.setScalar(s); world.add(g);
+  if(kind===0){ // broadleaf: thick trunk + layered canopy (~9 world units tall)
+    big(g, 0,6,0, 2.4,12,2.4, M.trunk, false);
+    big(g, 1.8,9,0.6, 1.6,4,1.6, M.trunk, false);
+    big(g, -1.6,9.4,-0.4, 1.4,3.6,1.4, M.trunk, false);
+    big(g, 0,13,0, 15,5,15, M.leaf, false);
+    big(g, -2.5,15.5,1.5, 9,3.5,9, M.leaf, false);
+    big(g, 2,15,-1.5, 7,2.5,7, M.grassDry, false);
+  } else if(kind===1){ // giant sakura landmark
+    big(g, 0,5.5,0, 2.6,11,2.6, M.trunk, false);
+    big(g, 2.6,9,0, 5,1.8,1.8, M.trunk, false);
+    big(g, -2.4,9.4,0.6, 4.4,1.6,1.6, M.trunk, false);
+    big(g, 0,13,0, 17,5,17, M.sakura, false);
+    big(g, -3.4,15.4,1.6, 10,3.5,10, M.sakura, false);
+    big(g, 3.4,15,-1.6, 9,3,9, M.white, false);
+  } else if(kind===2){ // tall pine: stacked conifer
+    big(g, 0,3,0, 1.8,7,1.8, M.trunk, false);
+    big(g, 0,8.5,0, 12,3,12, M.leaf, false);
+    big(g, 0,11,0, 9.5,2.8,9.5, M.leaf, false);
+    big(g, 0,13.5,0, 7,2.6,7, M.leaf, false);
+    big(g, 0,15.5,0, 4,2.4,4, M.leaf, false);
+  } else { // amber maple
+    big(g, 0,5,0, 2.2,10,2.2, M.trunk, false);
+    big(g, 1.4,8.6,0.4, 1.4,3.4,1.4, M.trunk, false);
+    big(g, 0,12,0, 14,5,14, mapleM, false);
+    big(g, -2.4,14,1, 8,3,8, mapleRedM, false);
+    big(g, 2.4,13.6,-1, 7,2.6,7, mapleM, false);
+  }
+}
+function wildBambooStalk(x,z,h){
+  const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=(x+z)%6.28; world.add(g);
+  big(g, 0,h/2,0, 1.0,h,1.0, M.bamboo, false);
+  big(g, 0,h*0.35,0, 1.2,0.5,1.2, mat(null,{color:0x2e7d39}), false);
+  big(g, 0,h*0.65,0, 1.2,0.5,1.2, mat(null,{color:0x2e7d39}), false);
+  big(g, 1.2,h-1,0, 2.6,0.4,1.2, M.leaf, false);
+  big(g, -1.1,h-2,0.3, 2.2,0.4,1.0, M.leaf, false);
+  big(g, 0.2,h-0.4,-1.0, 1.2,0.4,2.2, M.leaf, false);
+}
+function wildBush(x,z,s){
+  const g=new THREE.Group(); g.position.set(x,0,z); g.scale.setScalar(s); world.add(g);
+  big(g, 0,2,0, 7,4,7, M.leaf, false);
+  big(g, -1,3.6,0.6, 4,1.8,4, M.grassDry, false);
+  big(g, 1.2,1.2,1, 2.4,1.6,2.4, M.leaf, false);
+}
+function wildRock(x,z,s){
+  const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=(x*1.1-z)%6.28; g.scale.setScalar(s); world.add(g);
+  big(g, 0,1.2,0, 5,2.4,4.4, M.stoneDark, false);
+  big(g, 0.4,2.6,-0.3, 3.4,0.8,3, M.grassDry, false);
+}
+const wildBloomM=[null,null,null,null];
+function wildFlowers(x,z){
+  const g=new THREE.Group(); g.position.set(x,0,z); world.add(g);
+  const cols=[0xff6b81,0xffd166,0xffffff,0xc084fc], offs=[[-1,0],[1,0.5],[0,-1],[0.5,1]];
+  for(let i=0;i<4;i++){
+    big(g, offs[i][0],0.9,offs[i][1], 0.35,1.8,0.35, M.bamboo, false);
+    big(g, offs[i][0],2.0,offs[i][1], 0.9,0.6,0.9, mat(null,{color:cols[i]}), false);
+  }
+}
+function wildTuft(x,z,v){
+  const g=new THREE.Group(); g.position.set(x,0,z); world.add(g);
+  big(g, -0.3,0.5,0, 0.5,1.0+v,0.5, M.leaf, false);
+  big(g, 0.3,0.45,0.2, 0.5,0.9+v,0.5, M.grassDry, false);
+}
+function wildGrove(cx,cz,n,kinds){
+  for(let i=0;i<n;i++){ // golden-angle placement: organic, identical every load
+    const a=i*2.39996, r=4+((i*5)%12);
+    const x=cx+Math.cos(a)*r, z=cz+Math.sin(a)*r*0.9;
+    if(wildClear(x,z)) wildTree(x,z,kinds[i%kinds.length],0.95+((i*13)%4)*0.12);
+  }
+  for(let i=0;i<6;i++){ const a=i*1.047+0.5, r=11+((i*3)%5);
+    const x=cx+Math.cos(a)*r, z=cz+Math.sin(a)*r;
+    if(!wildClear(x,z)) continue;
+    if(i%3===0) wildBush(x,z,0.9+((i*7)%3)*0.15);
+    else if(i%3===1) wildFlowers(x,z);
+    else wildRock(x,z,0.8+((i*5)%3)*0.15);
+  }
+}
+function scatterWilds(){
+  wildGrove(-110,-30,9,[0,0,2,1]); // West Woods
+  wildGrove(-80,-110,9,[2,2,0,3]); // Northwest Pines
+  wildGrove(-10,-130,8,[1,1,0,1]); // North Sakura Grove
+  wildGrove(90,-100,9,[3,3,0,2]); // Northeast Maples
+  wildGrove(120,30,8,[0,2,1,0]); // East Grove
+  wildGrove(-90,90,8,[1,0,2,0]); // South Meadow Grove
+  wildGrove(-120,60,8,[1,1,3,0]); // Southwest Sakura
+  wildGrove(-150,-60,8,[2,0,0,3]); // Far West Pines
+  const marks=[[-150,40,1,1.5],[150,-60,3,1.5],[0,-160,2,1.5],[-40,-165,2,1.3],[60,-150,0,1.4],[160,80,0,1.4],[-160,-10,1,1.5],[75,130,3,1.4],[-75,140,2,1.3],[130,-40,0,1.4],[-80,160,0,1.3],[100,150,1,1.4]];
+  for(const m of marks) if(wildClear(m[0],m[1])) wildTree(m[0],m[1],m[2],m[3]); // lone landmarks
+  for(let r=0;r<3;r++) for(let c=0;c<5;c++) wildBambooStalk(70+c*4.5+(r%2)*2.2, 52+r*5, 17+((c+r)%3)*2); // SE bamboo forest
+  wildBambooStalk(-42,-40,18); wildBambooStalk(-38,-42,20); wildBambooStalk(-43,-36,16); wildBambooStalk(-37,-37,19); // west clump
+  for(let z=40;z<=56;z+=4){ wildFlowers(-4.5,z); wildFlowers(4.5,z); } // flower avenue to the maze
+  for(let k=0;k<20;k++){ const a=k*0.3142, x=Math.cos(a)*62, z=Math.sin(a)*62; // bush ring around the sanctuary
+    if(wildClear(x,z)) wildBush(x,z,1); }
+  const rocks=[[-38,-30],[-8,-36],[24,-34],[52,-12],[-44,-6],[44,4],[-40,12],[10,-40]]; // foothill boulders
+  for(let i=0;i<rocks.length;i++) wildRock(rocks[i][0],rocks[i][1],0.9+((i*7)%4)*0.2);
+  for(let gx=-176;gx<=176;gx+=22) for(let gz=-176;gz<=176;gz+=22){ // meadow grass grid
+    if(!wildClear(gx,gz)) continue;
+    wildTuft(gx,gz,((gx*7+gz*13)%5)*0.14);
+  }
+  // herds with wide roam boxes (clear of maze, core and peaks)
+  sheep(-80,30,[-160,-70,-60,60]); sheep(80,-25,[70,160,-60,40]); sheep(-30,-110,[-100,100,-170,-85]);
+  alpaca(-85,-35,0xcf9a5e,[-160,-70,-60,60]); alpaca(95,15,0x8a6a4a,[70,160,-60,40]); alpaca(40,-120,0xe8d8b0,[-100,100,-170,-85]);
+  sheep(-140,-100,[-170,-110,-140,-70]); alpaca(140,-110,[110,170,-140,-80]);
+}
+scatterWilds();
 
 /* ---- Birds (flapping voxel wings) ---- */
 const birds=[];
@@ -621,7 +737,7 @@ const uniGold = mat(TEX.gold, { emissive:0x7a5200, ei:0.5 });
 const uniHornTip = mat(null,{color:0xfff6c9, emissive:0xffd94d, ei:1.6});
 const uniEyeDark = mat(null,{color:0x1a1a22});
 const uniMouth = mat(null,{color:0x8a3b5e});
-const unicorn = new THREE.Group(); world.add(unicorn);
+const unicorn = new THREE.Group(); unicorn.scale.setScalar(0.85); world.add(unicorn); // alpaca-sized
 const uniBody = new THREE.Group(); unicorn.add(uniBody);
 // solid barrel body + chest + rump (no gaps)
 big(uniBody, 0,4.6,0, 3.2,2.8,7.2, uniPink);
@@ -740,7 +856,7 @@ document.getElementById('sunSlider').oninput=e=>sunArc=e.target.value/100;
 /* ============ CAMERA PRESETS ============ */
 const CAMS={
   pagoda:{ p:[0,7,22], t:[0,6,-4] },
-  samurai:{ p:[-6.5,2.5,18.5], t:[-1,1.8,13] },
+  samurai:{ p:[-11,3.5,27], t:[0,2.5,19.5] },
   meadow:{ p:[-24,6,12], t:[-16,1,0] },
   mountain:{ p:[0,10,34], t:[0,14,-55] },
   bird:{ p:[0,55,18], t:[0,0,-4] },
@@ -803,13 +919,13 @@ let playMode=false, uniAuto=true;
 const keys={};
 const UP=new THREE.Vector3(0,1,0);
 const uniVel={x:0,z:0};
-let uniVY=0, uniGrounded=true, uniSpeed=0, galPhase=0, dustT=0, uniGroundY=0;
+let uniVY=0, uniGrounded=true, uniSpeed=0, galPhase=0, dustT=0, uniGroundY=0, chaseDist=17, chaseH=10.5;
 const _fwd=new THREE.Vector3(), _rgt=new THREE.Vector3(), _mv=new THREE.Vector3(), _prevU=new THREE.Vector3();
 _prevU.copy(unicorn.position);
 function dampAngle(a,b,l,dt){ let d=(b-a)%(Math.PI*2); if(d>Math.PI)d-=Math.PI*2; if(d<-Math.PI)d+=Math.PI*2; return a+d*Math.min(1,l*dt); }
 // solid colliders: rects [x0,z0,x1,z1] + circles [x,z,r]
 const COL_R=[[-9.5,-13,9.5,2],[-1,3,13,15]]; // pagoda platform, pond
-const COL_C=[[-3.6,20,1],[3.6,20,1],[-7,16,1],[7,16,1],[-6,-1,1],[6.5,-1,1],[-3.2,13.5,1],[3.2,13.5,1],
+const COL_C=[[-3.6,20,1],[3.6,20,1],[-7,16,1],[7,16,1],[-6,-1,1],[6.5,-1,1],[-5.5,20,1],[5.5,20,1],
   [-12,2,1.3],[14,-2,1.5],[-16,-10,1.2],[18,4,1.3],[-9,-16,1.4],[-38,-52,16],[-8,-60,19],[24,-55,15],[52,-30,13],[-58,-18,12],[58,8,10],[-55,18,9]]; // torii posts, lanterns, samurai, sakura trunks, mountains
 function collideUnicorn(){
   let px=unicorn.position.x, pz=unicorn.position.z;
@@ -838,8 +954,8 @@ function collideUnicorn(){
   for(const bb of pandaBabies){ const dx=px-bb.position.x, dz=pz-bb.position.z, d=Math.hypot(dx,dz);
     if(d<1.0&&d>1e-4){ px=bb.position.x+dx/d*1.0; pz=bb.position.z+dz/d*1.0; } }
   }
-  unicorn.position.x=THREE.MathUtils.clamp(px,-52,52);
-  unicorn.position.z=THREE.MathUtils.clamp(pz,-46,52);
+  unicorn.position.x=THREE.MathUtils.clamp(px,-185,185);
+  unicorn.position.z=THREE.MathUtils.clamp(pz,-185,185);
 }
 // hoof dust puffs (shared material, scale instead of fade)
 const dustPool=[];
@@ -848,7 +964,7 @@ for(let i=0;i<24;i++){ const m=new THREE.Mesh(BOX,dustMat); m.visible=false; m.c
 function puff(x,y,z,s=1){ const d=dustPool.find(d=>d.life<=0); if(!d)return;
   d.life=0.5; d.m.visible=true; d.m.position.set(x,y,z); d.m.scale.setScalar(0.3*s); }
 // collectible voxel stars
-const STAR_SPOTS=[[-20,8],[-8,13],[11,1],[-4,-15],[17,-8],[-25,0],[5,21],[13,-3],[-12,-8],[14,6],[-32,10],[-30,-14],[24,8],[-8,-22],[4,19]];
+const STAR_SPOTS=[[-20,8],[-8,13],[11,1],[-4,-15],[17,-8],[-25,0],[5,21],[13,-3],[-12,-8],[14,6],[-32,10],[-30,-14],[24,8],[-8,-22],[4,19],[0,60],[8,88],[-6,112],[0,100]];
 const stars=[]; let starCount=0;
 const starMat=mat(TEX.gold,{emissive:0xa86e00,ei:0.9});
 function freeSpot(){ for(let k=0;k<12;k++){ const sp=STAR_SPOTS[(Math.random()*STAR_SPOTS.length)|0];
@@ -874,8 +990,8 @@ let sparkT=0, spaceHeld=0;
 let mazeActive=false, crowned=false, cinematicT=0, toastTimer=0, wingGrow=0, flapPhase=0, flying=false;
 const MAZE_COL=[]; const hedges=[]; let crownG=null;
 const mazeGroup=new THREE.Group(); world.add(mazeGroup);
-const MZ={cx:4,cz:38,pitch:2}; // 7x7 cells on the south field
-function mazeCell(lx,lz){ return [MZ.cx+(lx-7)*MZ.pitch, MZ.cz+(lz-7)*MZ.pitch]; }
+const MZ={cx:0,cz:118,pitch:6}; // 9x9 cells, 6-wide lanes, far south end
+function mazeCell(lx,lz){ return [MZ.cx+(lx-9)*MZ.pitch, MZ.cz+(lz-9)*MZ.pitch]; }
 function buildCrown(){
   const c=new THREE.Group();
   big(c, 0,0,0, 2.2,0.7,2.2, uniGold);
@@ -886,7 +1002,7 @@ function buildCrown(){
   return c;
 }
 function buildMaze(){
-  const N=15, grid=[];
+  const N=19, grid=[];
   for(let i=0;i<N;i++) grid.push(new Array(N).fill(1));
   const stack=[[1,1]]; grid[1][1]=0;
   const D=[[2,0],[-2,0],[0,2],[0,-2]];
@@ -898,29 +1014,29 @@ function buildMaze(){
     const o=opts[(Math.random()*opts.length)|0];
     grid[o[3]][o[2]]=0; grid[o[1]][o[0]]=0; stack.push([o[0],o[1]]);
   }
-  grid[0][7]=0; // north entrance gap facing the sanctuary
+  grid[0][9]=0; // north entrance gap facing the sanctuary
   const flowerM=mat(null,{color:0xff6b81});
   const berryM=mat(null,{color:0xffd166});
   for(let lz=0;lz<N;lz++) for(let lx=0;lx<N;lx++){
     if(!grid[lz][lx]) continue;
     const w=mazeCell(lx,lz), wx=w[0], wz=w[1];
-    const h=2.2+Math.random()*0.5;
-    const m=vox(mazeGroup, wx, h/2, wz, 2, h, 2, Math.random()<0.12?M.sakura:M.leaf);
-    m.scale.set(2,0.001,2); m.position.y=0.001;
+    const h=9+Math.random()*0.6; // taller than the unicorn: no seeing over the walls
+    const m=vox(mazeGroup, wx, h/2, wz, 6, h, 6, Math.random()<0.12?M.sakura:M.leaf);
+    m.scale.set(6,0.001,6); m.position.y=0.001;
     let f=null;
     const fr=Math.random();
     if(fr<0.16){ f=vox(mazeGroup, wx+0.4, h+0.2, wz-0.3, 0.35,0.35,0.35, flowerM, false); f.visible=false; }
     else if(fr<0.24){ f=vox(mazeGroup, wx-0.4, h+0.25, wz+0.3, 0.4,0.4,0.4, berryM, false); f.visible=false; }
     voxelCount+=f?2:1;
-    hedges.push({m, f, h, delay:Math.hypot(lx-7,lz)*0.14, p:0});
-    MAZE_COL.push([wx-1,wz-1,wx+1,wz+1]);
+    hedges.push({m, f, h, delay:Math.hypot(lx-9,lz)*0.14, p:0});
+    MAZE_COL.push([wx-4.2,wz-4.2,wx+4.2,wz+4.2]); // hedge + unicorn body + margin: no passing through
   }
-  const ew=mazeCell(7,0); // entrance mini-torii
-  vox(mazeGroup, ew[0]-1.7,1.5,ew[1], 0.9,3,0.9, M.red);
-  vox(mazeGroup, ew[0]+1.7,1.5,ew[1], 0.9,3,0.9, M.red);
-  vox(mazeGroup, ew[0],3.3,ew[1], 5.2,0.8,1.2, M.red);
-  vox(mazeGroup, ew[0],3.9,ew[1], 5.8,0.5,1.0, M.redDark);
-  const c=mazeCell(7,7); // crown pedestal at the heart
+  const ew=mazeCell(9,0); // entrance mini-torii
+  vox(mazeGroup, ew[0]-3,2.5,ew[1], 1.2,5,1.2, M.red);
+  vox(mazeGroup, ew[0]+3,2.5,ew[1], 1.2,5,1.2, M.red);
+  vox(mazeGroup, ew[0],5.4,ew[1], 8.2,1,1.5, M.red);
+  vox(mazeGroup, ew[0],6.2,ew[1], 8.8,0.6,1.3, M.redDark);
+  const c=mazeCell(9,9); // crown pedestal at the heart
   vox(mazeGroup, c[0],0.4,c[1], 2.4,0.8,2.4, M.stoneDark);
   vox(mazeGroup, c[0],1.2,c[1], 1.6,0.8,1.6, M.stone);
   vox(mazeGroup, c[0],1.85,c[1], 1.0,0.5,1.0, M.gold);
@@ -961,6 +1077,7 @@ function setPlay(on){
     controls.target.set(unicorn.position.x, unicorn.position.y+2.6, unicorn.position.z);
     _prevU.copy(unicorn.position);
     uniVel.x=0; uniVel.z=0;
+    chaseDist=17; chaseH=10.5;
     uniGroundY=groundY(unicorn.position.x,unicorn.position.z);
     controls.minDistance=4; controls.maxDistance=30;
   } else {
@@ -1039,8 +1156,9 @@ function animate(){
     if(ud.timer<=0){ ud.timer=2+Math.random()*5;
       if(Math.random()<0.45){ ud.mode='graze'; }
       else { ud.mode='walk'; const r=6+Math.random()*6, an=Math.random()*Math.PI*2;
-        ud.tx=THREE.MathUtils.clamp(a.position.x+Math.cos(an)*r,-36,-6);
-        ud.tz=THREE.MathUtils.clamp(a.position.z+Math.sin(an)*r,-16,14); }
+        const wb=ud.bnd||[-36,-6,-16,14]; // roam box [x0,x1,z0,z1], meadow by default
+        ud.tx=THREE.MathUtils.clamp(a.position.x+Math.cos(an)*r,wb[0],wb[1]);
+        ud.tz=THREE.MathUtils.clamp(a.position.z+Math.sin(an)*r,wb[2],wb[3]); }
     }
     if(ud.mode==='walk'){
       const dx=ud.tx-a.position.x, dz=ud.tz-a.position.z, d=Math.hypot(dx,dz);
@@ -1121,7 +1239,7 @@ function animate(){
           document.getElementById('objective').textContent='👑 A garden maze grew in the south — claim the crown!';
           showToast('<div style="font-size:52px">🌿</div><b style="font-size:24px">A garden maze has grown!</b><br><span>Enter through the north arch and find the 👑</span>',4); } } }
     if(mazeActive&&!crowned){ // claim the crown at the maze heart
-      const cdx=4-unicorn.position.x, cdz=38-unicorn.position.z;
+      const cdx=0-unicorn.position.x, cdz=118-unicorn.position.z;
       if(cdx*cdx+cdz*cdz<5.8&&unicorn.position.y<5){
         crowned=true; cinematicT=4.5; wingGrow=0.0001; flapPhase=0; flying=false;
         uniHead.add(crownG); crownG.position.set(0,0.95,0.1); crownG.rotation.set(0,0,0);
@@ -1145,7 +1263,10 @@ function animate(){
       camera.lookAt(controls.target);
     } else { // third-person: damped chase cam locked behind the unicorn
       _fwd.set(Math.sin(unicorn.rotation.y),0,Math.cos(unicorn.rotation.y));
-      _mv.set(unicorn.position.x-_fwd.x*17, unicorn.position.y+10.5, unicorn.position.z-_fwd.z*17);
+      const inMaze=mazeActive&&Math.abs(unicorn.position.x)<62&&unicorn.position.z>56&&unicorn.position.z<180&&unicorn.position.y<8;
+      chaseDist+=((inMaze?9.5:17)-chaseDist)*Math.min(1,dt*2); // tuck in close inside the maze
+      chaseH+=((inMaze?6.5:10.5)-chaseH)*Math.min(1,dt*2);
+      _mv.set(unicorn.position.x-_fwd.x*chaseDist, unicorn.position.y+chaseH, unicorn.position.z-_fwd.z*chaseDist);
       camera.position.lerp(_mv,1-Math.exp(-3.2*dt));
       _mv.set(unicorn.position.x,unicorn.position.y+2.6,unicorn.position.z);
       controls.target.lerp(_mv,1-Math.exp(-6*dt));
@@ -1186,7 +1307,7 @@ function animate(){
     h.delay-=dt; if(h.delay>0) continue;
     h.p=Math.min(1,h.p+dt*0.7);
     const e=1-Math.pow(1-h.p,3);
-    h.m.scale.set(2,Math.max(h.h*e,0.001),2); h.m.position.y=h.h*e/2;
+    h.m.scale.set(6,Math.max(h.h*e,0.001),6); h.m.position.y=h.h*e/2;
     if(h.f) h.f.visible=h.p>=1;
   }
   // stars spin/bob + respawn; dust rise
