@@ -96,6 +96,14 @@
   </div>
 </div>
 
+<div id="rideHud" style="display:none" class="fixed bottom-3 right-3 z-20">
+  <div class="glass rounded-2xl px-4 py-2 text-white text-center">
+    <div class="font-extrabold text-amber-300 text-sm">🌀 Mash SPACE!</div>
+    <div id="rideCount" class="text-2xl font-extrabold">0/10</div>
+    <div id="rideTime" class="text-xs text-white/70">7s left</div>
+  </div>
+</div>
+
 <div id="levelToast" style="display:none" class="fixed inset-0 z-30 place-items-center justify-center pointer-events-none">
   <div class="glass rounded-3xl px-10 py-8 text-center text-white max-w-md">
     <div id="toastBody" class="text-lg leading-relaxed"></div>
@@ -1132,7 +1140,7 @@ function blip(f=1320){ if(!audioOn||!AC||AC.state!=='running')return;
 let sparkT=0, spaceHeld=0;
 let mazeActive=false, crowned=false, cinematicT=0, toastTimer=0, wingGrow=0, flapPhase=0, flying=false;
 let tiaraEarned=false, pandaMode=false, ringIdx=0, ringSparkT=0; // level 3: alicorn ring trial -> tiara -> panda
-let bambooEaten=0, rideMode=false, rideT=0, mash=0, prevSpace=false, rideA=0, rideR=30, rideY=13; // level 4: bamboo feast -> alicorn ride
+let bambooEaten=0, rideMode=false, rideT=0, mash=0, prevSpace=false, rideA=0, rideR=30, rideY=13, slipT=0; // level 4: bamboo feast -> alicorn ride
 let finaleLock=false, spinT=0, babyMode=false, potT=0; // pagoda finale: floating pot -> baby panda
 let score=0, babyStars=0, queenMode=false, queenLock=false, queenT=0; // sakura queen ascension
 let hardMode=false, hardStage=0, bambooNeed=3, mashNeed=10, mashWindow=7; // hard mode: every challenge again, tougher
@@ -1222,13 +1230,7 @@ function buildPandaPlayer(){ // chunky playable panda: same footprint as the uni
   big(pandaHead, 0,-0.8,1.5, 1.0,0.22,0.3, pandaBlack, false); // mouth
   big(pandaBody, 2.4,3.0,2.6, 0.4,2.8,0.4, M.bamboo, false); // bamboo snack
   big(pandaBody, 2.4,4.3,2.6, 0.9,0.7,0.9, M.leaf, false);
-  pandaWingL=new THREE.Group(); pandaWingL.position.set(-2.2*V,5.6*V,-1.0*V); pandaBody.add(pandaWingL);
-  big(pandaWingL, -0.9,0.2,0, 1.8,0.4,0.9, M.white);
-  big(pandaWingL, -1.9,0.0,0, 1.6,0.3,1.1, uniPink, false);
-  pandaWingR=new THREE.Group(); pandaWingR.position.set(2.2*V,5.6*V,-1.0*V); pandaBody.add(pandaWingR);
-  big(pandaWingR, 0.9,0.2,0, 1.8,0.4,0.9, M.white);
-  big(pandaWingR, 1.9,0.0,0, 1.6,0.3,1.1, uniPink, false);
-}
+} // pandas ride wingless — the alicorn's own (bigger) wings do the flying
 function earnTiara(){ // final ring threaded: tiara prize + panda transformation, level 3
   tiaraEarned=true; pandaMode=true;
   buildPandaPlayer();
@@ -1269,8 +1271,8 @@ function startRide(){ // bamboo feast done: panda climbs onto the alicorn's back
   rideA=Math.atan2(unicorn.position.x,unicorn.position.z);
   rideR=Math.max(12,Math.hypot(unicorn.position.x,unicorn.position.z)); rideY=unicorn.position.y+6;
   flying=true; uniGrounded=false; uniVY=0; wingGrow=Math.max(wingGrow,1);
-  document.getElementById('objective').textContent=`🌀 Hold on! Mash SPACE ${mashNeed} times in ${mashWindow} seconds!`;
-  showToast('<div style="font-size:56px">🦄</div><b style="font-size:24px">Alicorn ride!</b><br><span>Mash <b>SPACE 10 times in 7 seconds</b> so the panda holds on!</span>',4);
+  document.getElementById('objective').textContent='🌀 Alicorn ride — mash SPACE, watch the corner panel!';
+  slipT=0;
   blip(880);
 }
 function buildPot(){ // magic pot for the pagoda finale
@@ -1294,6 +1296,7 @@ function startFinale(){ // mash won: inside the sakura pagoda the pot starts flo
   unicorn.position.set(0,1.35,-7); unicorn.rotation.y=Math.PI-0.35; // face the magic corner
   uniSpeed=0;
   buildPot(); finaleLock=true; spinT=0; potT=0;
+  document.getElementById('rideHud').style.display='none'; // ride over, corner panel away
   addScore(hardMode?300:150);
   document.getElementById('objective').textContent='✨ Something magic is happening…';
   blip(1174); // the LEVEL 4 toast lands when the spin ends — no text over the magic
@@ -1415,16 +1418,16 @@ function updateWings(dt,t){
   const amp=airborne?0.5:(Math.abs(uniSpeed)>1?0.2:0.07);
   const flap=Math.sin(flapPhase)*amp;
   const base=1.25+(0.12-1.25)*g, s=0.25+0.75*g;
-  const WL=pandaMode?(queenMode?queenWingL:pandaWingL):wingL, WR=pandaMode?(queenMode?queenWingR:pandaWingR):wingR;
-  if(!WL||!WR) return;
-  WL.visible=WR.visible=true;
-  WL.scale.setScalar(s); WR.scale.setScalar(s);
-  WL.rotation.z=base+flap; WR.rotation.z=-base-flap;
-  WL.rotation.y=0.3*(1-g); WR.rotation.y=-0.3*(1-g);
-  if(rideMode){ wingL.visible=wingR.visible=true; // the alicorn's own wings carry you both
-    wingL.scale.setScalar(s); wingR.scale.setScalar(s);
+  if(!pandaMode||rideMode){ wingL.visible=wingR.visible=true; // the alicorn's own bigger wings
+    wingL.scale.setScalar(s*1.6); wingR.scale.setScalar(s*1.6);
     wingL.rotation.z=base+flap; wingR.rotation.z=-base-flap;
     wingL.rotation.y=0.3*(1-g); wingR.rotation.y=-0.3*(1-g); }
+  if(pandaMode){ const WL=queenMode?queenWingL:pandaWingL, WR=queenMode?queenWingR:pandaWingR;
+    if(!WL||!WR) return; // pandas ride wingless
+    WL.visible=WR.visible=true;
+    WL.scale.setScalar(s); WR.scale.setScalar(s);
+    WL.rotation.z=base+flap; WR.rotation.z=-base-flap;
+    WL.rotation.y=0.3*(1-g); WR.rotation.y=-0.3*(1-g); }
 }
 function showToast(html,dur){ document.getElementById('toastBody').innerHTML=html;
   document.getElementById('levelToast').style.display='flex'; toastTimer=dur||4; }
@@ -1443,6 +1446,7 @@ function setPlay(on){
   camTween=null;
   for(const k in keys) keys[k]=false;
   toastQueue.length=0; // never pop a delayed toast over the wrong scene
+  document.getElementById('rideHud').style.display='none';
   if(on){
     const yaw=unicorn.rotation.y;
     _fwd.set(Math.sin(yaw),0,Math.cos(yaw));
@@ -1580,10 +1584,12 @@ function animate(){
       unicorn.position.set(Math.sin(rideA)*rideR, rideY+Math.sin(rideT*0.8)*1.2, Math.cos(rideA)*rideR);
       unicorn.rotation.y=Math.atan2(Math.cos(rideA),-Math.sin(rideA));
       uniSpeed=9; uniGrounded=false; flying=true;
-      document.getElementById('objective').textContent=`🌀 Hold on! Mash SPACE ${mash}/${mashNeed} — ${Math.max(0,Math.ceil(mashWindow-rideT))}s left!`;
+      slipT-=dt; // corner mash panel (bottom-right) keeps the alicorn in view
+      document.getElementById('rideHud').style.display='block';
+      document.getElementById('rideCount').textContent=slipT>0?'😱 Slipped!':`${mash}/${mashNeed}`;
+      document.getElementById('rideTime').textContent=slipT>0?'Mash faster!':`${Math.max(0,Math.ceil(mashWindow-rideT))}s left`;
       if(mash>=mashNeed){ startFinale(); }
-      else if(rideT>=mashWindow){ mash=0; rideT=0;
-        showToast(`<div style="font-size:52px">😱</div><b style="font-size:24px">The panda slipped!</b><br><span>Mash SPACE faster — ${mashNeed} clicks in ${mashWindow} seconds!</span>`,3); blip(220); }
+      else if(rideT>=mashWindow){ mash=0; rideT=0; slipT=1.6; blip(220); }
     }
     uniGroundY+=(groundY(unicorn.position.x,unicorn.position.z)-uniGroundY)*Math.min(1,dt*8);
     if(crowned&&flying){ // level 2 flight: hold space to rise, release to glide
