@@ -87,6 +87,7 @@
 <div id="gameHud" class="fixed top-3 left-1/2 -translate-x-1/2 z-20 hidden">
   <div class="glass rounded-2xl px-4 py-2 text-white text-center whitespace-nowrap">
     <span class="font-extrabold">⭐ <span id="starCount">0</span> stars</span>
+    <span class="font-extrabold ml-2">🏆 <span id="scoreVal">0</span></span>
     <button id="camThirdBtn" class="btn active rounded-lg px-2 py-1 text-xs font-bold bg-white/10 border border-white/20 ml-3">🎥 Third</button>
     <button id="camFirstBtn" class="btn rounded-lg px-2 py-1 text-xs font-bold bg-white/10 border border-white/20 ml-1">🦄 First</button>
     <span class="text-white/60 text-xs ml-3">W run · A/D steer · S brake · Shift gallop · Space jump · V camera · Esc exit</span>
@@ -98,6 +99,16 @@
 <div id="levelToast" style="display:none" class="fixed inset-0 z-30 place-items-center justify-center pointer-events-none">
   <div class="glass rounded-3xl px-10 py-8 text-center text-white max-w-md">
     <div id="toastBody" class="text-lg leading-relaxed"></div>
+  </div>
+</div>
+
+<div id="winScreen" style="display:none" class="fixed inset-0 z-40 items-center justify-center">
+  <div class="glass rounded-3xl px-10 py-8 text-center text-white max-w-md">
+    <div style="font-size:56px">🏆</div>
+    <b style="font-size:30px">YOU WON!</b>
+    <div class="text-lg mt-2">Your score: <b id="winScore">0</b></div>
+    <div class="text-amber-200">Highest score: <b id="winBest">0</b></div>
+    <button id="winAgain" class="btn rounded-xl px-6 py-3 mt-4 font-extrabold bg-amber-400 text-amber-950">🔄 Play Again</button>
   </div>
 </div>
 
@@ -1123,6 +1134,10 @@ let mazeActive=false, crowned=false, cinematicT=0, toastTimer=0, wingGrow=0, fla
 let tiaraEarned=false, pandaMode=false, ringIdx=0, ringSparkT=0; // level 3: alicorn ring trial -> tiara -> panda
 let bambooEaten=0, rideMode=false, rideT=0, mash=0, prevSpace=false, rideA=0, rideR=30, rideY=13; // level 4: bamboo feast -> alicorn ride
 let finaleLock=false, spinT=0, babyMode=false, potT=0; // pagoda finale: floating pot -> baby panda
+let score=0, babyStars=0, queenMode=false, queenLock=false, queenT=0; // sakura queen ascension
+let hardMode=false, hardStage=0, bambooNeed=3, mashNeed=10, mashWindow=7; // hard mode: every challenge again, tougher
+let queenBody=null, queenHead=null, queenTail=null, queenWingL=null, queenWingR=null; const queenLegs=[];
+function addScore(n){ score+=n; const el=document.getElementById('scoreVal'); if(el) el.textContent=score; }
 const BAMBOO_SPOTS=[[-24,8],[-20,-8],[12,-12],[24,12],[-4,-26]];
 const bambooMeshes=[]; let potG=null;
 const RING_SPOTS=[[0,12,52],[-28,12,28],[-40,14,0],[-28,15,-26],[-2,16,-36],[24,15,-26],[36,13,0],[24,12,26]];
@@ -1153,18 +1168,22 @@ function buildTiara(){ // dainty silver tiara with pink gems: the ring-trial pri
 const ringIdleM=mat(null,{color:0xc9a24d,emissive:0x5e430a,ei:0.5});
 const ringLiveM=mat(null,{color:0xffd166,emissive:0xa86e00,ei:1.1});
 const ringDoneM=mat(null,{color:0x7bf0b2,emissive:0x0d7a44,ei:0.9});
-function buildSkyRings(){ // level 2 alicorn obstacle: golden sky rings flown in order
-  for(let i=0;i<RING_SPOTS.length;i++){
-    const sp=RING_SPOTS[i];
-    const m=new THREE.Mesh(new THREE.TorusGeometry(3.4,0.55,8,22), i===0?ringLiveM:ringIdleM);
-    m.position.set(sp[0],sp[1],sp[2]);
-    const nx=RING_SPOTS[(i+1)%RING_SPOTS.length]; m.lookAt(nx[0],sp[1],nx[2]);
-    world.add(m);
-    const gem=new THREE.Mesh(new THREE.OctahedronGeometry(0.55), ringLiveM);
-    gem.position.copy(m.position); world.add(gem);
-    ringMeshes.push({m, gem, baseY:sp[1], passed:false, ph:Math.random()*9});
-  }
+function buildRing(i){ // one golden sky ring, facing the next
+  const sp=RING_SPOTS[i];
+  const m=new THREE.Mesh(new THREE.TorusGeometry(3.4,0.55,8,22), i===ringIdx?ringLiveM:ringIdleM);
+  m.position.set(sp[0],sp[1],sp[2]);
+  const nx=RING_SPOTS[(i+1)%RING_SPOTS.length]; m.lookAt(nx[0],sp[1],nx[2]);
+  world.add(m);
+  const gem=new THREE.Mesh(new THREE.OctahedronGeometry(0.55), ringLiveM);
+  gem.position.copy(m.position); world.add(gem);
+  ringMeshes.push({m, gem, baseY:sp[1], passed:false, ph:Math.random()*9});
 }
+function buildSkyRings(){ // level 2 alicorn obstacle: golden sky rings flown in order
+  for(let i=0;i<RING_SPOTS.length;i++) buildRing(i);
+}
+const RINGS2=[[-10,14,44],[-44,12,-18],[0,17,-44],[30,16,-8]]; // hard mode: 4 extra tighter hoops
+function buildRings2(){ ringIdx=RING_SPOTS.length;
+  for(const sp of RINGS2){ RING_SPOTS.push(sp); buildRing(RING_SPOTS.length-1); } }
 function animRings(t,dt){ // pulse the live ring, spin the rest, sparkle the course
   for(let i=0;i<ringMeshes.length;i++){
     const r=ringMeshes[i]; if(!r) continue;
@@ -1226,9 +1245,8 @@ function earnTiara(){ // final ring threaded: tiara prize + panda transformation
   document.getElementById('objective').textContent='🎋 Level 3 PANDA — eat 3 bamboo shoots!';
   buildBamboo();
 }
-function playLabel(){ return babyMode?'Baby Panda':(pandaMode?'Panda':'Unicorn'); }
-function buildBamboo(){ // level 3 snack hunt: crunchy shoots on open grass
-  for(const sp of BAMBOO_SPOTS){
+function playLabel(){ return queenMode?'Sakura Queen':(babyMode?'Baby Panda':(pandaMode?'Panda':'Unicorn')); }
+function buildBambooSpots(list){ for(const sp of list){
     const g=new THREE.Group(); g.position.set(sp[0],0,sp[1]); world.add(g);
     vox(g, 0,0.9,0, 0.5,1.8,0.5, M.bamboo);
     vox(g, 0,1.9,0, 0.4,0.9,0.4, M.bamboo, false);
@@ -1236,19 +1254,22 @@ function buildBamboo(){ // level 3 snack hunt: crunchy shoots on open grass
     vox(g, -0.5,1.2,0, 0.9,0.25,0.25, M.leaf, false);
     vox(g, 0,0.15,0, 1.1,0.3,1.1, M.dirt, false);
     bambooMeshes.push({m:g, ph:Math.random()*9, eaten:false});
-  }
-}
+  } }
+function buildBamboo(){ buildBambooSpots(BAMBOO_SPOTS); } // level 3 snack hunt: crunchy shoots on open grass
+const BAMBOO2_SPOTS=[[20,-20],[-28,-2],[4,30],[-12,22],[28,-6]]; // hard mode: 5 more shoots
+function buildBamboo2(){ buildBambooSpots(BAMBOO2_SPOTS); }
 function animBamboo(t,dt){ for(const b of bambooMeshes){ if(b.eaten)continue;
   b.m.position.y=Math.sin(t*2+b.ph)*0.15; b.m.rotation.y+=dt*0.6; } }
 function startRide(){ // bamboo feast done: panda climbs onto the alicorn's back
   for(const b of bambooMeshes) b.m.visible=false;
   uniBody.visible=true; // the alicorn returns to carry you
-  pandaBody.position.set(0,3.35,-0.3); // perched on the saddle blanket
+  (queenMode?queenBody:pandaBody).position.set(0,3.35,-0.3); // perched on the saddle blanket
   rideMode=true; rideT=0; mash=0; prevSpace=keys.space;
+  mashNeed=hardMode?14:10; mashWindow=hardMode?6:7;
   rideA=Math.atan2(unicorn.position.x,unicorn.position.z);
   rideR=Math.max(12,Math.hypot(unicorn.position.x,unicorn.position.z)); rideY=unicorn.position.y+6;
   flying=true; uniGrounded=false; uniVY=0; wingGrow=Math.max(wingGrow,1);
-  document.getElementById('objective').textContent='🌀 Hold on! Mash SPACE 10 times in 7 seconds!';
+  document.getElementById('objective').textContent=`🌀 Hold on! Mash SPACE ${mashNeed} times in ${mashWindow} seconds!`;
   showToast('<div style="font-size:56px">🦄</div><b style="font-size:24px">Alicorn ride!</b><br><span>Mash <b>SPACE 10 times in 7 seconds</b> so the panda holds on!</span>',4);
   blip(880);
 }
@@ -1269,13 +1290,82 @@ function startFinale(){ // mash won: inside the sakura pagoda the pot starts flo
   rideMode=false; flying=false; uniGrounded=true; uniVY=0;
   for(let i=0;i<5;i++) puff(unicorn.position.x+(Math.random()-0.5)*4, unicorn.position.y+4, unicorn.position.z+(Math.random()-0.5)*4, 1.5);
   uniBody.visible=false; // the alicorn bows out and flies away
-  pandaBody.position.set(0,0,0);
+  (queenMode?queenBody:pandaBody).position.set(0,0,0);
   unicorn.position.set(0,1.35,-7); unicorn.rotation.y=Math.PI-0.35; // face the magic corner
   uniSpeed=0;
   buildPot(); finaleLock=true; spinT=0; potT=0;
+  addScore(hardMode?300:150);
   document.getElementById('objective').textContent='✨ Something magic is happening…';
   showToast('<div style="font-size:52px">🏮</div><b style="font-size:24px">Inside the sakura pagoda…</b><br><span>The pot floats! The panda spins!</span>',3);
   blip(1174);
+}
+function buildQueen(){ // the Sakura Queen: blossom gown, hair buns, her own petal wings
+  queenBody=new THREE.Group(); queenBody.visible=false; unicorn.add(queenBody);
+  const gown=mat(null,{color:0xf7b8d0}), gownD=mat(null,{color:0xe77fae});
+  big(queenBody, 0,2.4,0, 4.6,4.0,4.6, gown); // gown bell
+  big(queenBody, 0,4.6,0, 3.4,1.2,3.4, gownD, false); // bodice
+  big(queenBody, 0,4.0,0, 3.6,0.5,3.6, uniGold, false); // obi sash
+  big(queenBody, 0,4.0,1.9, 1.2,0.9,0.4, uniGold, false); // obi knot
+  function qfoot(lx,lz){ const p=new THREE.Group(); p.position.set(lx*V,1.0*V,lz*V); queenBody.add(p);
+    big(p, 0,-0.4,0, 1.1,1.0,1.4, M.white); return p; }
+  queenLegs.push(qfoot(-1.3,1.3),qfoot(1.3,1.3),qfoot(-1.3,-1.3),qfoot(1.3,-1.3));
+  big(queenBody, -2.5,3.6,0.6, 1.2,2.4,1.4, M.white, false); // sleeves
+  big(queenBody, 2.5,3.6,0.6, 1.2,2.4,1.4, M.white, false);
+  queenHead=new THREE.Group(); queenHead.position.set(0,6.2*V,1.1*V); queenBody.add(queenHead);
+  big(queenHead, 0,0.4,0, 3.0,2.8,2.8, M.skin); // face
+  big(queenHead, 0,1.3,-0.9, 3.2,1.6,1.4, M.helmet, false); // flowing hair
+  big(queenHead, -1.7,2.0,-0.6, 1.1,1.1,1.1, M.helmet, false); // buns
+  big(queenHead, 1.7,2.0,-0.6, 1.1,1.1,1.1, M.helmet, false);
+  big(queenHead, -1.7,2.0,0.05, 0.7,0.7,0.4, M.sakura, false); // blossoms in the buns
+  big(queenHead, 1.7,2.0,0.05, 0.7,0.7,0.4, M.sakura, false);
+  big(queenHead, -0.7,0.5,1.42, 0.45,0.6,0.15, uniEyeDark, false); // eyes
+  big(queenHead, 0.7,0.5,1.42, 0.45,0.6,0.15, uniEyeDark, false);
+  big(queenHead, -0.62,0.68,1.5, 0.14,0.14,0.08, M.white, false); // glints
+  big(queenHead, 0.78,0.68,1.5, 0.14,0.14,0.08, M.white, false);
+  big(queenHead, -1.15,-0.1,1.35, 0.4,0.3,0.12, uniMane, false); // blush
+  big(queenHead, 1.15,-0.1,1.35, 0.4,0.3,0.12, uniMane, false);
+  big(queenHead, 0,-0.55,1.45, 0.5,0.22,0.12, uniMane, false); // lips
+  for(const sx of [-1.1,-0.35,0.35,1.1]) big(queenHead, sx,1.9,0.6, 0.5,0.5,0.5, M.sakura, false); // blossom circlet
+  queenTail=new THREE.Group(); queenTail.position.set(0,3.0*V,-2.4*V); queenBody.add(queenTail);
+  big(queenTail, 0,0,0, 1.6,1.6,0.8, gownD, false); // gown bustle
+  queenWingL=new THREE.Group(); queenWingL.position.set(-2.3*V,4.6*V,-0.6*V); queenBody.add(queenWingL);
+  big(queenWingL, -0.9,0.2,0, 1.8,0.4,1.0, M.sakura);
+  big(queenWingL, -1.9,0.0,0, 1.6,0.3,1.2, M.white, false);
+  queenWingR=new THREE.Group(); queenWingR.position.set(2.3*V,4.6*V,-0.6*V); queenBody.add(queenWingR);
+  big(queenWingR, 0.9,0.2,0, 1.8,0.4,1.0, M.sakura);
+  big(queenWingR, 1.9,0.0,0, 1.6,0.3,1.2, M.white, false);
+}
+function startQueenSpin(){ // 3 baby stars: spin and spin into the Sakura Queen
+  queenLock=true; queenT=0;
+  document.getElementById('objective').textContent='🌸 Spinning…';
+  showToast('<div style="font-size:56px">🌸</div><b style="font-size:24px">The baby panda spins…</b><br><span>Petals gather…</span>',3);
+  blip(1318);
+}
+function becomeQueen(){ // hard mode: every challenge again, a bit tougher
+  buildQueen();
+  pandaBody.visible=false; queenBody.visible=true;
+  pandaBody.rotation.y=0;
+  if(crownG){ pandaHead.remove(crownG); queenHead.add(crownG); crownG.position.set(0,1.75,0.3); crownG.rotation.set(0,0,0); }
+  if(tiaraG){ pandaHead.remove(tiaraG); queenHead.add(tiaraG); tiaraG.position.set(0,1.1,1.5); tiaraG.rotation.x=-0.25; }
+  queenMode=true; hardMode=true; hardStage=0; starCount=0; babyStars=0;
+  document.getElementById('starCount').textContent='0';
+  wingGrow=Math.max(wingGrow,1); addScore(300);
+  const lb=document.getElementById('levelBadge'); lb.textContent='🌸 Sakura Queen';
+  document.getElementById('objective').textContent='🌸 HARD MODE — every challenge again, tougher! Collect 15 stars!';
+  showToast('<div style="font-size:56px">👑</div><b style="font-size:28px">SAKURA QUEEN!</b><br><span>Now prove it: every challenge again, <b>a bit harder</b>!</span>',6);
+  document.getElementById('playBtn').innerHTML=playMode?'⏹️ Exit Sakura Queen (Esc)':'🌸 Play as Sakura Queen';
+  for(let i=0;i<6;i++) puff(unicorn.position.x+(Math.random()-0.5)*6, unicorn.position.y+3+Math.random()*3, unicorn.position.z+(Math.random()-0.5)*6, 1.6);
+  blip(1046); blip(1318); blip(1760);
+}
+function doWin(){ // every challenge conquered twice: final score + best + play again
+  addScore(500);
+  let best=0; try{ best=+localStorage.getItem('unicornBest')||0; }catch(e){}
+  if(score>best){ best=score; try{ localStorage.setItem('unicornBest',best); }catch(e){} }
+  document.getElementById('winScore').textContent=score;
+  document.getElementById('winBest').textContent=best;
+  document.getElementById('winScreen').style.display='flex';
+  setPlay(false);
+  blip(1046); blip(1318); blip(1568); blip(2093);
 }
 function buildMaze(){
   const N=19, grid=[];
@@ -1327,7 +1417,7 @@ function updateWings(dt,t){
   const amp=airborne?0.5:(Math.abs(uniSpeed)>1?0.2:0.07);
   const flap=Math.sin(flapPhase)*amp;
   const base=1.25+(0.12-1.25)*g, s=0.25+0.75*g;
-  const WL=pandaMode?pandaWingL:wingL, WR=pandaMode?pandaWingR:wingR;
+  const WL=pandaMode?(queenMode?queenWingL:pandaWingL):wingL, WR=pandaMode?(queenMode?queenWingR:pandaWingR):wingR;
   if(!WL||!WR) return;
   WL.visible=WR.visible=true;
   WL.scale.setScalar(s); WR.scale.setScalar(s);
@@ -1368,6 +1458,7 @@ function setPlay(on){
   }
 }
 document.getElementById('playBtn').onclick=()=>setPlay(!playMode);
+document.getElementById('winAgain').onclick=()=>location.reload();
 // first- / third-person ride camera
 let fpView=false;
 const _fp=new THREE.Vector3();
@@ -1467,7 +1558,7 @@ function animate(){
     _fwd.subVectors(controls.target,camera.position); _fwd.y=0;
     if(_fwd.lengthSq()<1e-6)_fwd.set(0,0,-1); _fwd.normalize();
     _rgt.crossVectors(_fwd,UP).normalize();
-    const locked=cinematicT>0; const held=locked||rideMode||finaleLock; // scripted sequences own the input
+    const locked=cinematicT>0; const held=locked||rideMode||finaleLock||queenLock; // scripted sequences own the input
     if(locked){ cinematicT-=dt; uniVel.x-=uniVel.x*Math.min(1,dt*4); uniVel.z-=uniVel.z*Math.min(1,dt*4);
       wingGrow=Math.min(1,wingGrow+dt/3.5);
       sparkT-=dt; if(sparkT<=0){ sparkT=0.12;
@@ -1488,10 +1579,10 @@ function animate(){
       unicorn.position.set(Math.sin(rideA)*rideR, rideY+Math.sin(rideT*0.8)*1.2, Math.cos(rideA)*rideR);
       unicorn.rotation.y=Math.atan2(Math.cos(rideA),-Math.sin(rideA));
       uniSpeed=9; uniGrounded=false; flying=true;
-      document.getElementById('objective').textContent=`🌀 Hold on! Mash SPACE ${mash}/10 — ${Math.max(0,Math.ceil(7-rideT))}s left!`;
-      if(mash>=10){ startFinale(); }
-      else if(rideT>=7){ mash=0; rideT=0;
-        showToast('<div style="font-size:52px">😱</div><b style="font-size:24px">The panda slipped!</b><br><span>Mash SPACE faster — 10 clicks in 7 seconds!</span>',3); blip(220); }
+      document.getElementById('objective').textContent=`🌀 Hold on! Mash SPACE ${mash}/${mashNeed} — ${Math.max(0,Math.ceil(mashWindow-rideT))}s left!`;
+      if(mash>=mashNeed){ startFinale(); }
+      else if(rideT>=mashWindow){ mash=0; rideT=0;
+        showToast(`<div style="font-size:52px">😱</div><b style="font-size:24px">The panda slipped!</b><br><span>Mash SPACE faster — ${mashNeed} clicks in ${mashWindow} seconds!</span>`,3); blip(220); }
     }
     uniGroundY+=(groundY(unicorn.position.x,unicorn.position.z)-uniGroundY)*Math.min(1,dt*8);
     if(crowned&&flying){ // level 2 flight: hold space to rise, release to glide
@@ -1510,8 +1601,10 @@ function animate(){
     const spd=Math.abs(uniSpeed);
     const sf=Math.min(1,spd/3);
     galPhase+=dt*(3+spd*1.7);
-    const _legs=pandaMode?pandaLegs:uniLegs, _bd=pandaMode?pandaBody:uniBody;
-    const _hd=pandaMode?pandaHead:uniHead, _tl=pandaMode?pandaTail:uniTail;
+    const _rbd=queenMode?queenBody:pandaBody, _rhd=queenMode?queenHead:pandaHead;
+    const _rtl=queenMode?queenTail:pandaTail, _rlg=queenMode?queenLegs:pandaLegs;
+    const _legs=pandaMode?_rlg:uniLegs, _bd=pandaMode?_rbd:uniBody;
+    const _hd=pandaMode?_rhd:uniHead, _tl=pandaMode?_rtl:uniTail;
     _legs[0].rotation.x=Math.sin(galPhase)*0.95*sf;
     _legs[3].rotation.x=Math.sin(galPhase)*0.95*sf;
     _legs[1].rotation.x=Math.sin(galPhase+Math.PI)*0.95*sf;
@@ -1529,6 +1622,13 @@ function animate(){
       const dx=s.g.position.x-unicorn.position.x, dz=s.g.position.z-unicorn.position.z;
       if(dx*dx+dz*dz<2.6){ s.taken=true; s.g.visible=false; s.timer=6; starCount++;
         document.getElementById('starCount').textContent=starCount; blip(1174+Math.random()*600);
+        addScore(hardMode?20:(babyMode&&!queenMode?20:10));
+        if(babyMode&&!queenMode&&!hardMode&&!queenLock){ babyStars++;
+          if(babyStars>=3){ startQueenSpin(); }
+          else document.getElementById('objective').textContent=`🍼 Baby stars ${babyStars}/3 — find more!`; }
+        if(hardMode&&hardStage===0&&starCount>=15){ hardStage=1; buildRings2(); addScore(200);
+          document.getElementById('objective').textContent='🌸 Queen trial: thread all 12 sky rings — tighter hoops!';
+          showToast('<div style="font-size:52px">🪽</div><b style="font-size:24px">HARD MODE · rings again!</b><br><span>4 extra hoops, tighter threading!</span>',4); }
         if(starCount>=10&&!mazeActive){ mazeActive=true; buildMaze();
           document.getElementById('objective').textContent='👑 A garden maze grew in the south — claim the crown!';
           showToast('<div style="font-size:52px">🌿</div><b style="font-size:24px">A garden maze has grown!</b><br><span>Enter through the north arch and find the 👑</span>',4); } } }
@@ -1541,14 +1641,16 @@ function animate(){
         const lb2=document.getElementById('levelBadge'); lb2.classList.remove('hidden'); lb2.textContent='🦄🪽 Lv 2 Alicorn';
         document.getElementById('objective').textContent='✨ ALICORN Level 2 — hold SPACE to fly! Thread the 8 sky rings!';
         showToast('<div style="font-size:56px">👑</div><b style="font-size:28px">LEVEL 2 UNLOCKED · ALICORN!</b><br><span>Wings are sprouting…</span><br><b>Hold SPACE to fly, thread the sky rings to earn a tiara!</b>',6);
+        addScore(100);
         blip(1568);
       }
     }
-    if(crowned&&!pandaMode&&ringIdx<RING_SPOTS.length){ // alicorn trial: thread the sky rings in order
+    if(crowned&&!pandaMode&&ringIdx<RING_SPOTS.length&&ringMeshes[ringIdx]){ // alicorn trial: thread the sky rings in order
       const rg=RING_SPOTS[ringIdx];
       const rdx=rg[0]-unicorn.position.x, rdy=rg[1]-unicorn.position.y, rdz=rg[2]-unicorn.position.z;
       if(rdx*rdx+rdy*rdy+rdz*rdz<11){
         const rm=ringMeshes[ringIdx]; rm.passed=true; rm.m.material=ringDoneM; rm.gem.visible=false; ringIdx++;
+        addScore(25);
         for(let i=0;i<3;i++) puff(rg[0],rg[1],rg[2],1.4);
         if(ringIdx>=RING_SPOTS.length){ earnTiara(); }
         else { ringMeshes[ringIdx].m.material=ringLiveM;
@@ -1556,26 +1658,51 @@ function animate(){
           blip(880+ringIdx*120); }
       }
     }
-    if(pandaMode&&!rideMode&&!babyMode&&!finaleLock&&bambooEaten<3){ // level 3: eat 3 bamboo shoots
+    if(hardMode&&hardStage===1&&ringIdx<RING_SPOTS.length&&ringMeshes[ringIdx]){ // queen trial: tighter hoops, all 12 in order
+      const rg=RING_SPOTS[ringIdx];
+      const rdx=rg[0]-unicorn.position.x, rdy=rg[1]-unicorn.position.y, rdz=rg[2]-unicorn.position.z;
+      if(rdx*rdx+rdy*rdy+rdz*rdz<7){
+        const rm=ringMeshes[ringIdx]; rm.passed=true; rm.m.material=ringDoneM; rm.gem.visible=false; ringIdx++;
+        addScore(50);
+        for(let i=0;i<3;i++) puff(rg[0],rg[1],rg[2],1.4);
+        if(ringIdx>=RING_SPOTS.length){ hardStage=2; bambooEaten=0; bambooNeed=5; buildBamboo2(); addScore(200);
+          document.getElementById('objective').textContent='🎋 Queen trial: eat 5 bamboo shoots!';
+          showToast('<div style="font-size:52px">🎋</div><b style="font-size:24px">Rings cleared — harder!</b><br><span>Now munch 5 bamboo shoots!</span>',4); }
+        else { ringMeshes[ringIdx].m.material=ringLiveM;
+          document.getElementById('objective').textContent=`🌸 Queen rings ${ringIdx-8}/4 — thread the glowing ring!`;
+          blip(880+ringIdx*120); }
+      }
+    }
+    if(!rideMode&&!finaleLock&&!queenLock&&bambooEaten<bambooNeed&&((pandaMode&&!babyMode&&!queenMode&&!hardMode)||(hardMode&&hardStage===2))){ // snack hunts: 3 shoots, then 5
       for(const b of bambooMeshes){ if(b.eaten)continue;
         const dx=b.m.position.x-unicorn.position.x, dz=b.m.position.z-unicorn.position.z;
         if(dx*dx+dz*dz<2.6&&unicorn.position.y<4){ b.eaten=true; b.m.visible=false; bambooEaten++;
-          puff(b.m.position.x,1.5,b.m.position.z,1.4); blip(520+bambooEaten*160);
-          if(bambooEaten>=3){ startRide(); }
-          else document.getElementById('objective').textContent=`🎋 Bamboo ${bambooEaten}/3 — find more shoots!`; } }
+          puff(b.m.position.x,1.5,b.m.position.z,1.4); blip(520+bambooEaten*160); addScore(hardMode?30:15);
+          if(bambooEaten>=bambooNeed){ startRide(); }
+          else document.getElementById('objective').textContent=`🎋 Bamboo ${bambooEaten}/${bambooNeed} — find more shoots!`; } }
     }
-    if(finaleLock){ // pagoda finale: the pot floats, the panda spins into a baby panda
+    if(queenLock){ // baby-to-queen spin: whirl until the petals settle
+      queenT+=dt;
+      pandaBody.rotation.y+=dt*15;
+      if(Math.random()<dt*10) puff(unicorn.position.x+(Math.random()-0.5)*4, unicorn.position.y+2+Math.random()*2, unicorn.position.z+(Math.random()-0.5)*4, 1.2);
+      if(queenT>=3){ queenLock=false; becomeQueen(); }
+    }
+    if(finaleLock){ // pagoda finale: the pot floats, the rider spins
       spinT+=dt; potT+=dt;
-      pandaBody.rotation.y+=dt*13;
+      (queenMode?queenBody:pandaBody).rotation.y+=dt*13;
       animPot(dt);
       if(potT>0.3){ potT=0; puff(unicorn.position.x+(Math.random()-0.5)*3, unicorn.position.y+2+Math.random()*2, unicorn.position.z+(Math.random()-0.5)*3, 1.1); }
-      if(spinT>=3.5){ finaleLock=false; babyMode=true;
+      if(spinT>=3.5){ finaleLock=false;
+        if(hardMode){ (queenMode?queenBody:pandaBody).rotation.y=0; doWin(); }
+        else { babyMode=true;
         pandaBody.scale.setScalar(0.55); pandaBody.rotation.y=0;
         const lb=document.getElementById('levelBadge'); lb.textContent='🍼 Lv 4 Baby';
         document.getElementById('objective').textContent='🍼 Level 4 BABY PANDA — explore the sanctuary!';
         showToast('<div style="font-size:56px">🍼</div><b style="font-size:28px">LEVEL 4 UNLOCKED · BABY PANDA!</b><br><span>So tiny, so magical!</span>',6);
         document.getElementById('playBtn').innerHTML=playMode?'⏹️ Exit Baby Panda (Esc)':'🐼 Play as Baby Panda';
+        addScore(200);
         blip(1046); blip(1318); blip(1760);
+        }
       }
     }
     if(locked){ // crowning cinematic: front camera framing the unicorn
@@ -1585,7 +1712,7 @@ function animate(){
       _mv.set(unicorn.position.x,unicorn.position.y+3.2,unicorn.position.z);
       controls.target.lerp(_mv,1-Math.exp(-4*dt));
     } else if(fpView){ // first-person ride cam glued to the head
-      (pandaMode?pandaHead:uniHead).getWorldPosition(_fp);
+      (pandaMode?(queenMode?queenHead:pandaHead):uniHead).getWorldPosition(_fp);
       _fwd.set(Math.sin(unicorn.rotation.y),0,Math.cos(unicorn.rotation.y));
       camera.position.set(_fp.x+_fwd.x*1.6, _fp.y+0.7, _fp.z+_fwd.z*1.6);
       controls.target.set(_fp.x+_fwd.x*12, _fp.y+0.4, _fp.z+_fwd.z*12);
@@ -1624,8 +1751,8 @@ function animate(){
   }
   } else { // parked after playing: idle graze where left
     unicorn.position.y+=((0.12+groundY(unicorn.position.x,unicorn.position.z))-unicorn.position.y)*Math.min(1,dt*4);
-    const _pl=pandaMode?pandaLegs:uniLegs, _pb=pandaMode?pandaBody:uniBody;
-    const _ph=pandaMode?pandaHead:uniHead, _pt=pandaMode?pandaTail:uniTail;
+    const _pl=pandaMode?(queenMode?queenLegs:pandaLegs):uniLegs, _pb=pandaMode?(queenMode?queenBody:pandaBody):uniBody;
+    const _ph=pandaMode?(queenMode?queenHead:pandaHead):uniHead, _pt=pandaMode?(queenMode?queenTail:pandaTail):uniTail;
     for(const l of _pl) l.rotation.x*=0.9;
     _pb.position.y*=0.9; _pb.rotation.x*=0.9;
     _ph.rotation.x=0.45+Math.sin(t*2.2)*0.12;
