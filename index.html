@@ -18,8 +18,35 @@
   @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
   .floaty{animation:floaty 4s ease-in-out infinite}
   body.ui-hidden .hidable{display:none!important}
-  #uiEye{display:none}
-  body.ui-hidden #uiEye{display:block}
+  /* Persistent HUD: objectives + touch stay visible when menu hidden */
+  body.ui-hidden #gameHud{display:block!important}
+  body.ui-hidden #touchUI{display:block!important}
+  body.ui-hidden #rideHud{opacity:0.92}
+  /* Minecraft-style transparent menu */
+  #menuBtn{font-family:ui-monospace,Menlo,Consolas,monospace;image-rendering:pixelated;letter-spacing:.5px;
+    background:rgba(0,0,0,.55)!important;border:2px solid #fff!important;outline:2px solid #111;
+    box-shadow:inset -2px -4px 0 rgba(0,0,0,.5),inset 2px 2px 0 rgba(255,255,255,.25);text-shadow:2px 2px 0 #111}
+  #mainMenu{font-family:ui-monospace,Menlo,Consolas,monospace;image-rendering:pixelated;
+    background:rgba(0,0,0,.55)!important;border:2px solid #fff!important;outline:2px solid #111;
+    box-shadow:inset -2px -4px 0 rgba(0,0,0,.5),0 8px 32px rgba(0,0,0,.45);text-shadow:1px 1px 0 #111}
+  #mainMenu .mc-sec{border:2px solid rgba(255,255,255,.55);background:rgba(255,255,255,.06)}
+  #mainMenu .mc-sec>summary{cursor:pointer;list-style:none;font-weight:800;font-size:12px;padding:6px 8px;color:#fff}
+  #mainMenu .mc-sec>summary::-webkit-details-marker{display:none}
+  #mainMenu .mc-btn{background:rgba(255,255,255,.12)!important;border:2px solid rgba(255,255,255,.7)!important;color:#fff!important;
+    box-shadow:inset -2px -2px 0 rgba(0,0,0,.45),inset 2px 2px 0 rgba(255,255,255,.25);text-shadow:1px 1px 0 #111}
+  #mainMenu .mc-btn.active{background:rgba(251,191,36,.92)!important;color:#1c1917!important;text-shadow:none;border-color:#fff!important}
+  /* Touch controls */
+  #touchUI{position:fixed;inset:auto 0 0 0;z-index:25;pointer-events:none;display:none}
+  #touchUI .tcluster{position:fixed;bottom:14px;display:flex;gap:10px;pointer-events:none}
+  #touchUI .tleft{left:14px}
+  #touchUI .tright{right:14px;align-items:flex-end}
+  #touchUI .tdpad{display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,56px);gap:6px;pointer-events:none}
+  #touchUI button{pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
+    width:56px;height:56px;border-radius:14px;font-size:22px;font-weight:800;color:#fff;
+    background:rgba(15,23,42,.38);border:2px solid rgba(255,255,255,.55);backdrop-filter:blur(6px)}
+  #touchUI button.on{background:rgba(251,191,36,.75);color:#1c1917}
+  #touchUI .twide{width:68px}
+  @media (hover:hover) and (pointer:fine){ #touchUI{opacity:.85} }
 </style>
 <script type="importmap">
 { "imports": {
@@ -31,67 +58,81 @@
 <body>
 <div id="scene"></div>
 
-<!-- Header -->
-<div class="fixed top-3 left-3 z-20 max-w-[220px] hidable">
-  <div class="glass rounded-xl p-2.5 text-white">
-    <div class="flex items-center gap-1.5">
-      <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-red-500 to-amber-400 grid place-items-center text-base floaty">⛩️</div>
-      <div>
-        <h1 class="font-extrabold tracking-tight leading-none text-sm">Voxel Zen Sanctuary</h1>
-        <p class="text-[9px] text-white/70 tracking-widest uppercase mt-0.5">Minecraft × Japanese Mountain</p>
+<!-- Menu button + consolidated Minecraft-style menu -->
+<button id="menuBtn" class="btn fixed top-3 left-3 z-20 rounded-none px-4 py-2.5 text-sm font-extrabold text-white">☰ Menu</button>
+<div id="mainMenu" style="display:none" class="fixed top-14 left-3 z-20 w-64 max-h-[82vh] overflow-y-auto scroll-thin rounded-none p-2.5 text-white">
+  <div class="text-center text-sm font-extrabold tracking-widest">⛩️ VOXEL ZEN SANCTUARY</div>
+  <div class="text-center text-[9px] text-white/70 tracking-widest uppercase">Minecraft × Japanese Mountain</div>
+
+  <details class="mc-sec rounded-none mt-2" open>
+    <summary>🎮 Game</summary>
+    <div class="p-2">
+      <button id="playBtn" class="btn mc-btn w-full rounded-none px-2 py-2 text-xs font-extrabold">▶ Play</button>
+      <p class="text-[9px] text-white/60 mt-1 text-center">Ride: W run · A/D steer · S brake · arrows work too · touch pad on mobile</p>
+    </div>
+  </details>
+
+  <details class="mc-sec rounded-none mt-2">
+    <summary>📊 Stats</summary>
+    <div class="grid grid-cols-3 gap-1 p-2 text-[10px] text-center">
+      <div class="rounded-none bg-white/10 px-1 py-1"><div id="statVox" class="font-bold text-xs">0</div><div class="text-white/60">voxels</div></div>
+      <div class="rounded-none bg-white/10 px-1 py-1"><div id="statFps" class="font-bold text-xs">60</div><div class="text-white/60">fps</div></div>
+      <div class="rounded-none bg-white/10 px-1 py-1"><div id="clock" class="font-bold text-xs">☀️</div><div id="modeLabel" class="text-white/60">Morning</div></div>
+    </div>
+    <p class="text-[10px] text-white/60 px-2 pb-2 leading-snug">Variable voxels: <b class="text-white">4×4</b> mountains · <b class="text-white">1×1</b> pagoda · <b class="text-white">0.25</b> micro-voxel life.</p>
+  </details>
+
+  <details class="mc-sec rounded-none mt-2">
+    <summary>☀️ Time</summary>
+    <div class="p-2">
+      <div class="grid grid-cols-3 gap-1.5">
+        <button data-time="morning" class="timeBtn btn mc-btn active rounded-none px-2 py-2 text-xs font-bold">🌅<br>Morning</button>
+        <button data-time="sunset" class="timeBtn btn mc-btn rounded-none px-2 py-2 text-xs font-bold">🌇<br>Sunset</button>
+        <button data-time="night" class="timeBtn btn mc-btn rounded-none px-2 py-2 text-xs font-bold">🌙<br>Night</button>
       </div>
+      <input id="sunSlider" type="range" min="0" max="100" value="30" class="w-full mt-2.5 accent-amber-400" title="Sun position" />
+      <button id="autoCycleBtn" class="btn mc-btn active w-full mt-1.5 rounded-none px-2 py-1.5 text-xs font-bold">🕰️ Auto day cycle: On</button>
+      <p class="text-[10px] text-white/50 mt-1">Very slow morning → sunset → night while playing. Picking a time pauses auto.</p>
     </div>
-    <p class="text-[10px] text-white/75 mt-1 leading-snug">Variable voxels: <b class="text-white">4×4</b> mountains · <b class="text-white">1×1</b> pagoda · <b class="text-white">0.25</b> micro-voxel life. 16×16 canvas textures · NearestFilter.</p>
-    <div class="grid grid-cols-3 gap-1 mt-1.5 text-[10px]">
-      <div class="rounded-lg bg-white/10 px-1 py-1 text-center"><div id="statVox" class="font-bold text-xs">0</div><div class="text-white/60">voxels</div></div>
-      <div class="rounded-lg bg-white/10 px-1 py-1 text-center"><div id="statFps" class="font-bold text-xs">60</div><div class="text-white/60">fps</div></div>
-      <div class="rounded-lg bg-white/10 px-1 py-1 text-center"><div id="clock" class="font-bold text-xs">☀️</div><div id="modeLabel" class="text-white/60">Morning</div></div>
+  </details>
+
+  <details class="mc-sec rounded-none mt-2">
+    <summary>🎥 Demo Mode — views</summary>
+    <div class="p-2">
+      <div class="grid grid-cols-2 gap-1.5 text-xs font-bold">
+        <button data-cam="pagoda" class="camBtn btn mc-btn active rounded-none px-2 py-2">⛩️ Pagoda Front</button>
+        <button data-cam="samurai" class="camBtn btn mc-btn rounded-none px-2 py-2">⚔️ Samurai</button>
+        <button data-cam="meadow" class="camBtn btn mc-btn rounded-none px-2 py-2">🐑 Meadow</button>
+        <button data-cam="mountain" class="camBtn btn mc-btn rounded-none px-2 py-2">🏔️ Mountain</button>
+        <button data-cam="bird" class="camBtn btn mc-btn rounded-none px-2 py-2">🦅 Bird's Eye</button>
+        <button data-cam="bridge" class="camBtn btn mc-btn rounded-none px-2 py-2">🌉 Bridge</button>
+        <button data-cam="falls" class="camBtn btn mc-btn rounded-none px-2 py-2">🌊 Falls</button>
+        <button data-cam="unicorn" class="camBtn btn mc-btn rounded-none px-2 py-2">🦄 Unicorn</button>
+        <button data-cam="panda" class="camBtn btn mc-btn rounded-none px-2 py-2">🐼 Pandas</button>
+      </div>
+      <button id="rotBtn" class="btn mc-btn w-full mt-1.5 rounded-none px-2 py-1.5 text-xs font-bold">🔁 Auto-orbit: Off</button>
+      <p class="text-[10px] text-white/50 mt-1">Right-drag orbit · Scroll zoom · works when not playing</p>
     </div>
-    <button id="playBtn" class="btn w-full mt-1.5 rounded-lg px-2 py-1.5 text-xs font-extrabold bg-gradient-to-r from-pink-500 to-amber-400 text-white shadow-lg">🦄 Play as Unicorn</button>
-    <p class="text-[9px] text-white/50 mt-1 text-center">Ride: W run · A/D steer · S brake · arrows work too</p>
-  </div>
+  </details>
+
+  <details class="mc-sec rounded-none mt-2">
+    <summary>🔊 Sound</summary>
+    <div class="p-2 flex flex-col gap-1.5">
+      <button id="audioBtn" class="btn mc-btn active w-full rounded-none px-2 py-2 text-xs font-bold">🔊 Wind + Chimes: On</button>
+      <button id="sfxBtn" class="btn mc-btn active w-full rounded-none px-2 py-2 text-xs font-bold">🔊 SFX: On</button>
+    </div>
+  </details>
+
+  <details class="mc-sec rounded-none mt-2">
+    <summary>⚙️ Options</summary>
+    <div class="p-2 flex gap-1.5">
+      <button id="helpBtn" class="btn mc-btn flex-1 rounded-none px-2 py-1.5 text-xs font-bold">❓ Help</button>
+      <button id="hideUiBtn" class="btn mc-btn flex-1 rounded-none px-2 py-1.5 text-xs font-bold">👁️ Hide Menu</button>
+    </div>
+  </details>
 </div>
 
-<!-- Time + Audio -->
-<div class="fixed top-3 right-3 z-20 w-56 hidable">
-  <div class="glass rounded-2xl p-3 text-white">
-    <p class="text-[11px] font-bold tracking-widest uppercase text-white/70 mb-2">☀️ Time Mode</p>
-    <div class="grid grid-cols-3 gap-1.5">
-      <button data-time="morning" class="timeBtn btn active rounded-xl px-2 py-2 text-xs font-bold bg-white/10 border border-white/20">🌅<br>Morning</button>
-      <button data-time="sunset" class="timeBtn btn rounded-xl px-2 py-2 text-xs font-bold bg-white/10 border border-white/20">🌇<br>Sunset</button>
-      <button data-time="night" class="timeBtn btn rounded-xl px-2 py-2 text-xs font-bold bg-white/10 border border-white/20">🌙<br>Night</button>
-    </div>
-    <div class="mt-2.5 flex gap-1.5">
-      <button id="audioBtn" class="btn flex-1 rounded-xl px-2 py-2 text-xs font-bold bg-emerald-400/90 text-emerald-950">🔇 Wind + Chimes: Off</button>
-      <button id="rotBtn" class="btn rounded-xl px-3 py-2 text-xs font-bold bg-white/10 border border-white/20">🔁</button>
-    </div>
-    <input id="sunSlider" type="range" min="0" max="100" value="30" class="w-full mt-2.5 accent-amber-400" title="Sun position" />
-    <div class="mt-2 flex gap-1.5">
-      <button id="helpBtn" class="btn flex-1 rounded-xl px-2 py-1.5 text-xs font-bold bg-white/10 border border-white/20">❓ Help</button>
-      <button id="hideUiBtn" class="btn flex-1 rounded-xl px-2 py-1.5 text-xs font-bold bg-white/10 border border-white/20">👁️ Hide UI</button>
-    </div>
-    <p class="text-[10px] text-white/50 mt-1">Drag slider for sun arc · Right-drag orbit · Scroll zoom</p>
-  </div>
-</div>
-
-<!-- Camera presets -->
-<div class="fixed bottom-3 left-1/2 -translate-x-1/2 z-20 w-[min(96vw,860px)] hidable">
-  <div class="glass rounded-2xl px-3 py-2.5">
-    <div class="flex gap-2 overflow-x-auto scroll-thin text-white text-xs font-bold">
-      <button data-cam="pagoda" class="camBtn btn active whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">⛩️ Pagoda Front</button>
-      <button data-cam="samurai" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">⚔️ Samurai Closeup</button>
-      <button data-cam="meadow" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🐑 Pastoral Meadow</button>
-      <button data-cam="mountain" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🏔️ Mountain Vista</button>
-      <button data-cam="bird" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🦅 Bird's Eye</button>
-      <button data-cam="bridge" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🌉 Bridge & Pond</button>
-      <button data-cam="falls" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🌊 Falls</button>
-      <button data-cam="unicorn" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🦄 Unicorn</button>
-      <button data-cam="panda" class="camBtn btn whitespace-nowrap rounded-xl px-3 py-2 bg-white/10 border border-white/20">🐼 Pandas</button>
-    </div>
-  </div>
-</div>
-
-<div id="gameHud" class="fixed top-3 left-1/2 -translate-x-1/2 z-20 hidden hidable">
+<div id="gameHud" class="fixed top-3 left-1/2 -translate-x-1/2 z-20 hidden">
   <div class="glass rounded-2xl px-4 py-2 text-white text-center whitespace-nowrap">
     <span class="font-extrabold">⭐ <span id="starCount">0</span> stars</span>
     <span class="font-extrabold ml-2">🏆 <span id="scoreVal">0</span></span>
@@ -102,11 +143,26 @@
   </div>
 </div>
 
-<div id="rideHud" style="display:none" class="fixed bottom-3 right-3 z-20 hidable">
+<div id="rideHud" style="display:none;bottom:96px" class="fixed right-3 z-20">
   <div class="glass rounded-2xl px-4 py-2 text-white text-center">
     <div class="font-extrabold text-amber-300 text-sm">🌀 Mash SPACE!</div>
     <div id="rideCount" class="text-2xl font-extrabold">0/10</div>
     <div id="rideTime" class="text-xs text-white/70">7s left</div>
+  </div>
+</div>
+
+<!-- Touch controls: D-pad left, actions right (persistent during play) -->
+<div id="touchUI">
+  <div class="tcluster tleft">
+    <div class="tdpad">
+      <span></span><button data-k="w" aria-label="Forward">▲</button><span></span>
+      <button data-k="a" aria-label="Left">◀</button><button data-k="s" aria-label="Back">▼</button><button data-k="d" aria-label="Right">▶</button>
+      <span></span><button id="touchCam" aria-label="Camera">🎥</button><span></span>
+    </div>
+  </div>
+  <div class="tcluster tright">
+    <button data-k="shift" class="twide" aria-label="Run">🏃</button>
+    <button data-k="space" class="twide" aria-label="Jump" style="height:68px">⤒</button>
   </div>
 </div>
 
@@ -131,17 +187,15 @@
     <div class="text-center" style="font-size:44px">⛩️</div>
     <b class="block text-center" style="font-size:22px">How to Play</b>
     <div class="text-sm mt-3 leading-relaxed space-y-2">
-      <p>🎮 <b>Ride:</b> W run · A/D steer · S brake · Shift gallop · Space jump · arrows work too</p>
+      <p>🎮 <b>Ride:</b> W run · A/D steer · S brake · Shift gallop · Space jump · arrows work too · touch: left pad moves, right buttons jump/run</p>
       <p>🪽 <b>Fly:</b> as alicorn or queen, hold SPACE to rise, release to glide</p>
-      <p>🎥 <b>Camera:</b> V toggles first/third person · drag to orbit while exploring · bottom buttons jump to views</p>
+      <p>🎥 <b>Camera:</b> V toggles first/third person · drag to orbit while exploring · ☰ Menu → Demo Mode jumps to views (exits game mode)</p>
       <p>⭐ <b>Quest:</b> stars → maze → crown → sky rings → tiara → bamboo → alicorn ride (mash SPACE!) → pot → baby → stars → Sakura Queen → everything again, harder → 🏆 YOU WON</p>
-      <p class="text-white/60 text-xs">Esc exits play · H hides the UI</p>
+      <p class="text-white/60 text-xs">Esc exits play · H hides the menu · ☰ Menu holds Stats, Time, Demo views, Sound</p>
     </div>
     <button id="helpClose" class="btn w-full rounded-xl px-3 py-2 mt-4 text-sm font-extrabold bg-amber-400 text-amber-950">Got it!</button>
   </div>
 </div>
-
-<button id="uiEye" class="btn fixed top-3 right-3 z-40 glass rounded-full w-10 h-10 text-lg text-white">👁️</button>
 
 <script type="module">
 import * as THREE from 'three';
@@ -1048,15 +1102,38 @@ const TIMES={
   night:{ sky:0x0b1026, fog:0x0b1026, sun:0x8fa8ff, sunI:0.45, hemi:0.25, lan:26, cel:0xe8eeff, glow:0.5, label:'Night', icon:'🌙', shoji:1.7, bg:'linear-gradient(#0b1026,#1e2a52)' },
 };
 let cur=TIMES.morning, tgt=TIMES.morning, sunArc=0.3;
+let autoCycle=true, dayT=0.12; // very slow full loop (~4 min); starts in morning
+const DAY_LEN=240;
 const tmpC=new THREE.Color(), tmpF=new THREE.Color();
-function setTime(name){
+function refreshAutoBtn(){ const b=document.getElementById('autoCycleBtn'); if(b){ b.textContent=autoCycle?'🕰️ Auto day cycle: On':'🕰️ Auto day cycle: Off'; b.classList.toggle('active',autoCycle); } }
+function setTime(name, manual=true){
   tgt=TIMES[name];
   document.querySelectorAll('.timeBtn').forEach(b=>b.classList.toggle('active',b.dataset.time===name));
   document.getElementById('modeLabel').textContent=tgt.label;
   document.getElementById('clock').textContent=tgt.icon;
+  if(manual){ // picking a time pauses the slow auto-cycle; re-enable via the auto button
+    if(name==='morning') dayT=0.1; else if(name==='sunset') dayT=0.45; else dayT=0.75;
+    sunArc=name==='morning'?0.3:(name==='sunset'?0.62:0.85);
+    const sl=document.getElementById('sunSlider'); if(sl) sl.value=Math.round(sunArc*100);
+    if(autoCycle){ autoCycle=false; refreshAutoBtn(); }
+  }
 }
-document.querySelectorAll('.timeBtn').forEach(b=>b.onclick=()=>setTime(b.dataset.time));
-document.getElementById('sunSlider').oninput=e=>sunArc=e.target.value/100;
+function tickDayCycle(dt){
+  if(!autoCycle) return;
+  dayT=(dayT+dt/DAY_LEN)%1;
+  // morning 0-.38 -> sunset .38-.58 -> night .58-1 -> morning
+  const phase=dayT<0.38?'morning':(dayT<0.58?'sunset':'night');
+  if(tgt!==TIMES[phase]){
+    tgt=TIMES[phase];
+    document.querySelectorAll('.timeBtn').forEach(b=>b.classList.toggle('active',b.dataset.time===phase));
+    document.getElementById('modeLabel').textContent=tgt.label;
+    document.getElementById('clock').textContent=tgt.icon;
+  }
+  sunArc=0.12+dayT*0.76; // sun glides slowly across the sky all day
+  const sl=document.getElementById('sunSlider'); if(sl&&document.activeElement!==sl) sl.value=Math.round(sunArc*100);
+}
+document.querySelectorAll('.timeBtn').forEach(b=>b.onclick=()=>{ setTime(b.dataset.time); sfx('ui'); });
+document.getElementById('sunSlider').oninput=e=>{ sunArc=e.target.value/100; if(autoCycle){ autoCycle=false; refreshAutoBtn(); } };
 
 /* ============ CAMERA PRESETS ============ */
 const CAMS={
@@ -1076,15 +1153,66 @@ function flyTo(name){
   camTween={ p0:camera.position.clone(), t0:controls.target.clone(), p1:new THREE.Vector3(...c.p), t1:new THREE.Vector3(...c.t), k:0 };
   document.querySelectorAll('.camBtn').forEach(b=>b.classList.toggle('active',b.dataset.cam===name));
 }
-document.querySelectorAll('.camBtn').forEach(b=>b.onclick=()=>flyTo(b.dataset.cam));
-document.getElementById('rotBtn').onclick=e=>{ controls.autoRotate=!controls.autoRotate; e.currentTarget.classList.toggle('active',controls.autoRotate); };
+document.querySelectorAll('.camBtn').forEach(b=>b.onclick=()=>{ if(playMode) setPlay(false); flyTo(b.dataset.cam); sfx('ui'); });
+document.getElementById('rotBtn').onclick=e=>{ controls.autoRotate=!controls.autoRotate; e.currentTarget.classList.toggle('active',controls.autoRotate);
+  e.currentTarget.textContent=controls.autoRotate?'🔁 Auto-orbit: On':'🔁 Auto-orbit: Off'; sfx('ui'); };
+const menuBtn=document.getElementById('menuBtn'), mainMenu=document.getElementById('mainMenu');
+function toggleMenu(force){ const show=force!==undefined?force:mainMenu.style.display!=='block';
+  mainMenu.style.display=show?'block':'none'; menuBtn.classList.toggle('active',show); }
+if(menuBtn) menuBtn.onclick=()=>{ document.body.classList.remove('ui-hidden'); toggleMenu(); sfx('ui'); };
+const autoBtn=document.getElementById('autoCycleBtn'); if(autoBtn) autoBtn.onclick=()=>{ autoCycle=!autoCycle; refreshAutoBtn(); sfx('ui'); };
 
-/* ============ AMBIENT AUDIO (Web Audio: wind + chimes) ============ */
-let AC=null, audioOn=false, windGain=null, chimeTimer=null;
+/* ============ SFX + AMBIENT AUDIO (Web Audio, gesture-unlocked) ============ */
+let AC=null, audioOn=true, windGain=null, chimeTimer=null, sfxOn=true, stepFlip=false, audioStarted=false;
+function ensureAC(){ try{
+  if(!AC) AC=new (window.AudioContext||window.webkitAudioContext)();
+  if(AC.state==='suspended') AC.resume();
+  return AC; }catch(e){ return null; } }
+addEventListener('pointerdown',()=>{ if(sfxOn) ensureAC(); },{passive:true});
+addEventListener('keydown',()=>{ if(sfxOn) ensureAC(); });
+function tone(f0,f1,dur,type='sine',vol=0.2,when=0){
+  if(!sfxOn) return; const ac=ensureAC(); if(!ac||ac.state!=='running') return;
+  try{ const t=ac.currentTime+when, o=ac.createOscillator(), g=ac.createGain();
+    o.type=type; o.frequency.setValueAtTime(f0,t);
+    if(f1&&f1!==f0) o.frequency.exponentialRampToValueAtTime(Math.max(f1,1),t+dur);
+    g.gain.setValueAtTime(0.0001,t); g.gain.linearRampToValueAtTime(vol,t+0.015);
+    g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t+dur+0.05); }catch(e){}
+}
+function noiseBurst(dur=0.09,vol=0.12,fc=900,when=0){
+  if(!sfxOn) return; const ac=ensureAC(); if(!ac||ac.state!=='running') return;
+  try{ const t=ac.currentTime+when, len=Math.max(1,(ac.sampleRate*dur)|0);
+    const buf=ac.createBuffer(1,len,ac.sampleRate), d=buf.getChannelData(0);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*(1-i/len);
+    const src=ac.createBufferSource(); src.buffer=buf;
+    const f=ac.createBiquadFilter(); f.type='lowpass'; f.frequency.value=fc;
+    const g=ac.createGain(); g.gain.value=vol;
+    src.connect(f); f.connect(g); g.connect(ac.destination); src.start(t); }catch(e){}
+}
+function sfx(name){
+  if(!sfxOn) return;
+  switch(name){
+    case 'step': stepFlip=!stepFlip; noiseBurst(0.07,0.10,stepFlip?700:560); break;
+    case 'gallop': stepFlip=!stepFlip; noiseBurst(0.06,0.14,stepFlip?1100:850); tone(stepFlip?190:170,120,0.07,'triangle',0.08); break;
+    case 'jump': tone(280,720,0.22,'square',0.10); noiseBurst(0.12,0.06,1600); break;
+    case 'land': tone(180,55,0.16,'sine',0.22); noiseBurst(0.1,0.12,400); break;
+    case 'star': tone(1174,1174,0.14,'triangle',0.2); tone(1760,1760,0.22,'triangle',0.18,0.09); break;
+    case 'crown': [523,659,784,1046].forEach((f,i)=>tone(f,f,0.25,'triangle',0.2,i*0.11)); break;
+    case 'ring': noiseBurst(0.25,0.08,2400); tone(880,1320,0.3,'sine',0.18,0.05); break;
+    case 'bamboo': noiseBurst(0.08,0.2,1400); noiseBurst(0.09,0.18,900,0.09); tone(220,140,0.1,'triangle',0.12,0.02); break;
+    case 'mash': tone(660+Math.random()*200,900,0.06,'square',0.10); break;
+    case 'interact': tone(520,780,0.12,'triangle',0.16); tone(1040,1040,0.14,'sine',0.12,0.07); break;
+    case 'levelup': [659,784,880,1174,1318].forEach((f,i)=>tone(f,f,0.28,'triangle',0.2,i*0.1)); break;
+    case 'win': [523,659,784,1046,784,1046,1318,1568].forEach((f,i)=>tone(f,f,0.3,'triangle',0.2,i*0.13)); break;
+    case 'splash': noiseBurst(0.3,0.1,800); tone(400,150,0.25,'sine',0.1); break;
+    case 'ui': tone(600,800,0.07,'square',0.06); break;
+  }
+}
 const PENTA=[659.25, 783.99, 880, 987.77, 1174.66, 1318.51]; // E5..E6 Miyako-ish
 function startAudio(){
-  AC = AC || new (window.AudioContext||window.webkitAudioContext)();
-  AC.resume();
+  ensureAC();
+  if(!AC||audioStarted) { if(AC&&AC.state==='suspended'&&audioOn) AC.resume(); return; }
+  audioStarted=true;
   // wind: looped noise -> lowpass + slow LFO gain
   const len=AC.sampleRate*3, buf=AC.createBuffer(1,len,AC.sampleRate), d=buf.getChannelData(0);
   for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
@@ -1115,10 +1243,15 @@ document.getElementById('audioBtn').onclick=e=>{
   audioOn=!audioOn;
   e.currentTarget.textContent = audioOn ? '🔊 Wind + Chimes: On' : '🔇 Wind + Chimes: Off';
   e.currentTarget.classList.toggle('active',audioOn);
-  if(audioOn){ startAudio(); } else { clearTimeout(chimeTimer); if(AC){ AC.suspend(); setTimeout(()=>audioOn&&AC.resume(),0); if(windGain) windGain.gain.value=0; } }
+  if(audioOn){ ensureAC(); startAudio(); sfx('ui'); } else { clearTimeout(chimeTimer); if(AC){ AC.suspend(); setTimeout(()=>audioOn&&AC.resume(),0); if(windGain) windGain.gain.value=0; } }
   if(audioOn && AC && AC.state==='suspended') AC.resume();
   if(audioOn && windGain) windGain.gain.value=0.05;
 };
+const sfxBtn=document.getElementById('sfxBtn');
+if(sfxBtn) sfxBtn.onclick=e=>{ sfxOn=!sfxOn;
+  e.currentTarget.textContent=sfxOn?'🔊 SFX: On':'🔇 SFX: Off';
+  e.currentTarget.classList.toggle('active',sfxOn);
+  if(sfxOn) sfx('ui'); };
 
 /* ============ GAME MODE: third-person unicorn ============ */
 let playMode=false, uniAuto=true;
@@ -1126,6 +1259,7 @@ const keys={};
 const UP=new THREE.Vector3(0,1,0);
 const uniVel={x:0,z:0};
 let uniVY=0, uniGrounded=true, uniSpeed=0, galPhase=0, dustT=0, uniGroundY=0, chaseDist=19, chaseH=12.5;
+let stepT=0, wasGrounded=true;
 const _fwd=new THREE.Vector3(), _rgt=new THREE.Vector3(), _mv=new THREE.Vector3(), _prevU=new THREE.Vector3();
 _prevU.copy(unicorn.position);
 // solid colliders: rects [x0,z0,x1,z1] + circles [x,z,r]
@@ -1186,11 +1320,7 @@ function makeStar(x,z){
   const s={g,ph:Math.random()*9,taken:false,timer:0,baseY:groundY(x,z)+1.3}; g.position.y=s.baseY; stars.push(s); return s;
 }
 for(let i=0;i<5;i++){ const sp=freeSpot(); makeStar(sp[0],sp[1]); }
-function blip(f=1320){ if(!audioOn||!AC||AC.state!=='running')return;
-  try{ const o=AC.createOscillator(), g=AC.createGain(), t0=AC.currentTime;
-    o.type='triangle'; o.frequency.setValueAtTime(f,t0); o.frequency.exponentialRampToValueAtTime(f*1.5,t0+0.12);
-    g.gain.setValueAtTime(0.18,t0); g.gain.exponentialRampToValueAtTime(0.0001,t0+0.4);
-    o.connect(g); g.connect(AC.destination); o.start(t0); o.stop(t0+0.45); }catch(e){} }
+function blip(f=1320){ sfx('star'); }
 // maze quest: level 2 (spawns south at 10 stars, crown grants wings + flight)
 let sparkT=0, spaceHeld=0;
 let mazeActive=false, crowned=false, cinematicT=0, toastTimer=0, wingGrow=0, flapPhase=0, flying=false;
@@ -1296,9 +1426,9 @@ function earnTiara(){ // final ring threaded: tiara prize + panda transformation
   const lb=document.getElementById('levelBadge');
   lb.textContent='🐼 Lv 3 Panda'; lb.classList.remove('bg-amber-400','text-amber-950'); lb.classList.add('bg-emerald-300','text-emerald-950');
   showToastLater('<div style="font-size:56px">🐼</div><b style="font-size:28px">LEVEL 3 UNLOCKED!</b><br><span>The alicorn earns a tiara and becomes a panda!</span>',6,1.6);
-  document.getElementById('playBtn').innerHTML=playMode?'⏹️ Exit Panda (Esc)':'🐼 Play as Panda';
+  document.getElementById('playBtn').textContent=playMode?'⏹ exit game mode':'▶ Play';
   for(let i=0;i<6;i++) puff(unicorn.position.x+(Math.random()-0.5)*6, unicorn.position.y+3+Math.random()*3, unicorn.position.z+(Math.random()-0.5)*6, 1.6);
-  blip(1046); blip(1318); blip(1568);
+  sfx('levelup');
   document.getElementById('objective').textContent='🎋 Level 3 PANDA — eat 3 bamboo shoots!';
   buildBamboo();
 }
@@ -1328,7 +1458,7 @@ function startRide(){ // bamboo feast done: panda climbs onto the alicorn's back
   flying=true; uniGrounded=false; uniVY=0; wingGrow=Math.max(wingGrow,1);
   document.getElementById('objective').textContent='🌀 Alicorn ride — mash SPACE, watch the corner panel!';
   slipT=0;
-  blip(880);
+  sfx('interact');
 }
 function buildPot(){ // magic pot for the pagoda finale
   const p=new THREE.Group(); p.position.set(2.0,1.35,-8.2); world.add(p);
@@ -1354,7 +1484,7 @@ function startFinale(){ // mash won: inside the sakura pagoda the pot starts flo
   document.getElementById('rideHud').style.display='none'; // ride over, corner panel away
   addScore(hardMode?300:150);
   document.getElementById('objective').textContent='✨ Something magic is happening…';
-  blip(1174); // the LEVEL 4 toast lands when the spin ends — no text over the magic
+  sfx('crown'); // the LEVEL 4 toast lands when the spin ends — no text over the magic
 }
 function buildQueen(){ // the Sakura Queen: blossom gown, hair buns, her own petal wings
   queenBody=new THREE.Group(); queenBody.visible=false; unicorn.add(queenBody);
@@ -1395,7 +1525,7 @@ function buildQueen(){ // the Sakura Queen: blossom gown, hair buns, her own pet
 function startQueenSpin(){ // 3 baby stars: spin and spin into the Sakura Queen
   queenLock=true; queenT=0;
   document.getElementById('objective').textContent='🌸 Spinning…';
-  blip(1318); // the SAKURA QUEEN toast lands when the spin ends — no text over the magic
+  sfx('ring'); // the SAKURA QUEEN toast lands when the spin ends — no text over the magic
 }
 function becomeQueen(){ // hard mode: every challenge again, a bit tougher
   buildQueen();
@@ -1409,9 +1539,9 @@ function becomeQueen(){ // hard mode: every challenge again, a bit tougher
   const lb=document.getElementById('levelBadge'); lb.textContent='🌸 Sakura Queen';
   document.getElementById('objective').textContent='🌸 HARD MODE — every challenge again, tougher! Collect 15 stars!';
   showToast('<div style="font-size:56px">👑</div><b style="font-size:28px">SAKURA QUEEN!</b><br><span>Now prove it: every challenge again, <b>a bit harder</b>!</span>',6);
-  document.getElementById('playBtn').innerHTML=playMode?'⏹️ Exit Sakura Queen (Esc)':'🌸 Play as Sakura Queen';
+  document.getElementById('playBtn').textContent=playMode?'⏹ exit game mode':'▶ Play';
   for(let i=0;i<6;i++) puff(unicorn.position.x+(Math.random()-0.5)*6, unicorn.position.y+3+Math.random()*3, unicorn.position.z+(Math.random()-0.5)*6, 1.6);
-  blip(1046); blip(1318); blip(1760);
+  sfx('levelup');
 }
 function doWin(){ // every challenge conquered twice: final score + best + play again
   addScore(500);
@@ -1420,8 +1550,8 @@ function doWin(){ // every challenge conquered twice: final score + best + play 
   document.getElementById('winScore').textContent=score;
   document.getElementById('winBest').textContent=best;
   document.getElementById('winScreen').style.display='flex';
+  sfx('win');
   setPlay(false);
-  blip(1046); blip(1318); blip(1568); blip(2093);
 }
 function buildMaze(){
   const N=19, grid=[];
@@ -1493,8 +1623,10 @@ function setPlay(on){
   setView(false); // reset to third-person, restores horn/FOV/controls
   if(document.activeElement) document.activeElement.blur();
   document.getElementById('gameHud').classList.toggle('hidden',!on);
+  document.getElementById('touchUI').style.display=on?'block':'none'; // touch pad lives with play mode, even when menu hidden
+  if(on&&typeof toggleMenu==='function') toggleMenu(false); // entering play closes the menu; objectives HUD stays on top
   const btn=document.getElementById('playBtn');
-  btn.innerHTML=on?('⏹️ Exit '+playLabel()+' (Esc)'):('🦄 Play as '+playLabel());
+  btn.textContent=on?'⏹ exit game mode':'▶ Play';
   btn.classList.toggle('active',on);
   controls.autoRotate=false;
   controls.enableRotate=!on; controls.enablePan=!on; // chase cam owns the angle while playing
@@ -1517,15 +1649,35 @@ function setPlay(on){
     flyTo('meadow');
   }
 }
-document.getElementById('playBtn').onclick=()=>setPlay(!playMode);
+document.getElementById('playBtn').onclick=()=>{ setPlay(!playMode); sfx('ui'); };
 document.getElementById('winAgain').onclick=()=>location.reload();
 function toggleHelp(force){ const m=document.getElementById('helpModal'); m.style.display=(force!==undefined?force:m.style.display!=='flex')?'flex':'none'; }
-function toggleUI(){ document.body.classList.toggle('ui-hidden'); }
+function toggleUI(){ document.body.classList.add('ui-hidden');
+  if(typeof toggleMenu==='function') toggleMenu(false); sfx('ui'); }
 document.getElementById('helpBtn').onclick=()=>toggleHelp();
 document.getElementById('helpClose').onclick=()=>toggleHelp(false);
 document.getElementById('helpModal').onclick=e=>{ if(e.target.id==='helpModal') toggleHelp(false); };
 document.getElementById('hideUiBtn').onclick=()=>toggleUI();
-document.getElementById('uiEye').onclick=()=>toggleUI();
+/* Touch controls: hold D-pad / action buttons -> same keys object as keyboard */
+function pressTouch(k,down,el){
+  const map={ e:'space' }; // ✨ Interact acts as contextual SPACE (jump / mash / fly) since pickup is proximity-based
+  const real=map[k]||k;
+  keys[real]=down; if(k!==real) keys[k]=down;
+  if(el) el.classList.toggle('on',down);
+  if(down){ ensureAC(); if(k==='e') sfx('interact'); }
+}
+document.querySelectorAll('#touchUI [data-k]').forEach(btn=>{
+  const k=btn.dataset.k;
+  const on=e=>{ e.preventDefault(); pressTouch(k,true,btn); };
+  const off=e=>{ e.preventDefault(); pressTouch(k,false,btn); };
+  btn.addEventListener('pointerdown',on);
+  btn.addEventListener('pointerup',off);
+  btn.addEventListener('pointercancel',off);
+  btn.addEventListener('pointerleave',off);
+  btn.addEventListener('contextmenu',e=>e.preventDefault());
+});
+const touchCam=document.getElementById('touchCam');
+if(touchCam) touchCam.addEventListener('click',e=>{ e.preventDefault(); if(playMode){ setView(!fpView); sfx('ui'); } });
 // first- / third-person ride camera
 let fpView=false;
 const _fp=new THREE.Vector3();
@@ -1538,19 +1690,21 @@ function setView(fp){
   if(!fp) _prevU.copy(unicorn.position);
   if(!fp&&Math.abs(camera.fov-50)>0.05){ camera.fov=50; camera.updateProjectionMatrix(); }
 }
-document.getElementById('camThirdBtn').onclick=()=>setView(false);
-document.getElementById('camFirstBtn').onclick=()=>setView(true);
+document.getElementById('camThirdBtn').onclick=()=>{ setView(false); sfx('ui'); };
+document.getElementById('camFirstBtn').onclick=()=>{ setView(true); sfx('ui'); };
 addEventListener('keydown',e=>{
   const k=e.key.toLowerCase();
   if(playMode&&(k===' '||k.startsWith('arrow'))) e.preventDefault();
   if(k==='escape'&&document.getElementById('helpModal').style.display==='flex'){ toggleHelp(false); return; }
   if(k==='escape'&&playMode){ setPlay(false); return; }
-  if(k==='h'){ toggleUI(); return; }
+  if(k==='h'||k==='m'){ const open=mainMenu.style.display==='block';
+    if(open){ toggleUI(); } else { document.body.classList.remove('ui-hidden'); toggleMenu(true); } return; }
   if(k==='v'&&playMode){ setView(!fpView); return; }
+  if(k==='e'&&playMode){ keys.space=true; keys.e=true; if(!e.repeat) sfx('interact'); return; }
   if(k==='enter'&&!playMode&&document.activeElement===document.body){ setPlay(true); return; }
   keys[k===' '?'space':k]=true;
 });
-addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); keys[k===' '?'space':k]=false; });
+addEventListener('keyup',e=>{ const k=e.key.toLowerCase(); keys[k===' '?'space':k]=false; if(k==='e'){ keys.e=false; } });
 
 /* ============ ANIMATION ============ */
 const clk=new THREE.Clock();
@@ -1560,7 +1714,8 @@ function animate(){
   requestAnimationFrame(animate);
   const dt=Math.min(clk.getDelta(),0.05), t=clk.elapsedTime;
 
-  // smooth time-mode blending
+  // smooth time-mode blending + very slow auto day cycle (morning → sunset → night)
+  tickDayCycle(dt);
   for(const k of ['sunI','hemi','lan','glow','shoji']) cur[k]+= (tgt[k]-cur[k])*Math.min(1,dt*2);
   tmpC.set(cur.sky).lerp(new THREE.Color(tgt.sky), Math.min(1,dt*2));
   cur.sky='#'+tmpC.getHexString();
@@ -1633,7 +1788,7 @@ function animate(){
       sparkT-=dt; if(sparkT<=0){ sparkT=0.12;
         puff(unicorn.position.x+(Math.random()-0.5)*3,unicorn.position.y+3.2,unicorn.position.z+(Math.random()-0.5)*3,1.2); } }
     if(keys.space)spaceHeld+=dt; else spaceHeld=0;
-    if(keys.space&&!prevSpace&&rideMode){ mash++; blip(660+mash*60); } prevSpace=keys.space; // hold-on minigame: 10 clicks
+    if(keys.space&&!prevSpace&&rideMode){ mash++; sfx('mash'); } prevSpace=keys.space; // hold-on minigame: 10 clicks
     const steer=held?0:(((keys.a||keys.arrowleft)?1:0)-((keys.d||keys.arrowright)?1:0));
     const throttle=held?0:((keys.w||keys.arrowup)?1:0)-((keys.s||keys.arrowdown)?1:0);
     const maxSp=keys.shift?11:(flying?9.5:6.5);
@@ -1653,7 +1808,7 @@ function animate(){
       document.getElementById('rideCount').textContent=slipT>0?'😱 Slipped!':`${mash}/${mashNeed}`;
       document.getElementById('rideTime').textContent=slipT>0?'Mash faster!':`${Math.max(0,Math.ceil(mashWindow-rideT))}s left`;
       if(mash>=mashNeed){ startFinale(); }
-      else if(rideT>=mashWindow){ mash=0; rideT=0; slipT=1.6; blip(220); }
+      else if(rideT>=mashWindow){ mash=0; rideT=0; slipT=1.6; sfx('land'); }
     }
     uniGroundY+=(groundY(unicorn.position.x,unicorn.position.z)-uniGroundY)*Math.min(1,dt*8);
     if(crowned&&flying){ // level 2 flight: hold space to rise, release to glide
@@ -1662,12 +1817,15 @@ function animate(){
       if(unicorn.position.y>20){ unicorn.position.y=20; uniVY=0; }
       if(unicorn.position.y<=0.12+uniGroundY&&uniVY<=0){ unicorn.position.y=0.12+uniGroundY; uniVY=0; uniGrounded=true; flying=false; }
     } else {
-      if(uniGrounded&&keys.space&&!held){ uniVY=7; uniGrounded=false; puff(unicorn.position.x,unicorn.position.y+0.3,unicorn.position.z,2); }
+      if(uniGrounded&&keys.space&&!held){ uniVY=7; uniGrounded=false; puff(unicorn.position.x,unicorn.position.y+0.3,unicorn.position.z,2); sfx('jump'); }
+      const _wasAir=!uniGrounded;
       if(!uniGrounded){ uniVY-=24*dt; unicorn.position.y+=uniVY*dt;
-        if(unicorn.position.y<=0.12+uniGroundY&&uniVY<=0){ unicorn.position.y=0.12+uniGroundY; uniVY=0; uniGrounded=true; } }
+        if(unicorn.position.y<=0.12+uniGroundY&&uniVY<=0){ unicorn.position.y=0.12+uniGroundY; uniVY=0; uniGrounded=true; if(_wasAir) sfx('land'); } }
       else if(!finaleLock) unicorn.position.y=0.12+uniGroundY; // ride smoothly over bumps
-      if(crowned&&uniGrounded&&keys.space&&spaceHeld>0.28&&!finaleLock){ flying=true; uniGrounded=false; uniVY=Math.max(uniVY,3.5); blip(1568); }
+      if(crowned&&uniGrounded&&keys.space&&spaceHeld>0.28&&!finaleLock){ flying=true; uniGrounded=false; uniVY=Math.max(uniVY,3.5); sfx('jump'); }
     }
+    if(!wasGrounded&&uniGrounded) sfx('land'); // touchdown after flight
+    wasGrounded=uniGrounded;
     collideUnicorn();
     const spd=Math.abs(uniSpeed);
     const sf=Math.min(1,spd/3);
@@ -1689,6 +1847,9 @@ function animate(){
     if(spd>5&&uniGrounded&&dustT<=0){ dustT=0.09;
       const bx=unicorn.position.x-Math.sin(unicorn.rotation.y)*2, bz=unicorn.position.z-Math.cos(unicorn.rotation.y)*2;
       puff(bx+(Math.random()-0.5),unicorn.position.y+0.15,bz+(Math.random()-0.5),1.4); }
+    // walk / gallop footsteps scale with speed
+    stepT-=dt*(0.6+spd*0.55);
+    if(playMode&&uniGrounded&&spd>0.6&&stepT<=0){ stepT=spd>7?0.55:0.8; sfx(spd>7?'gallop':'step'); }
     for(const s of stars){ if(s.taken)continue;
       const dx=s.g.position.x-unicorn.position.x, dz=s.g.position.z-unicorn.position.z;
       if(dx*dx+dz*dz<2.6){ s.taken=true; s.g.visible=false; s.timer=6; starCount++;
@@ -1713,7 +1874,7 @@ function animate(){
         document.getElementById('objective').textContent='✨ ALICORN Level 2 — hold SPACE to fly! Thread the 8 sky rings!';
         showToastLater('<div style="font-size:56px">👑</div><b style="font-size:28px">LEVEL 2 UNLOCKED · ALICORN!</b><br><span>Wings are sprouting…</span><br><b>Hold SPACE to fly, thread the sky rings to earn a tiara!</b>',6,4.5);
         addScore(100);
-        blip(1568);
+        sfx('crown');
       }
     }
     if(crowned&&!pandaMode&&ringIdx<RING_SPOTS.length&&ringMeshes[ringIdx]){ // alicorn trial: thread the sky rings in order
@@ -1726,7 +1887,7 @@ function animate(){
         if(ringIdx>=RING_SPOTS.length){ earnTiara(); }
         else { ringMeshes[ringIdx].m.material=ringLiveM;
           document.getElementById('objective').textContent=`✨ Alicorn rings ${ringIdx}/${RING_SPOTS.length} — thread the glowing ring!`;
-          blip(880+ringIdx*120); }
+          sfx('ring'); }
       }
     }
     if(hardMode&&hardStage===1&&ringIdx<RING_SPOTS.length&&ringMeshes[ringIdx]){ // queen trial: tighter hoops, all 12 in order
@@ -1741,14 +1902,14 @@ function animate(){
           showToast('<div style="font-size:52px">🎋</div><b style="font-size:24px">Rings cleared — harder!</b><br><span>Now munch 5 bamboo shoots!</span>',4); }
         else { ringMeshes[ringIdx].m.material=ringLiveM;
           document.getElementById('objective').textContent=`🌸 Queen rings ${ringIdx-8}/4 — thread the glowing ring!`;
-          blip(880+ringIdx*120); }
+          sfx('ring'); }
       }
     }
     if(!rideMode&&!finaleLock&&!queenLock&&bambooEaten<bambooNeed&&((pandaMode&&!babyMode&&!queenMode&&!hardMode)||(hardMode&&hardStage===2))){ // snack hunts: 3 shoots, then 5
       for(const b of bambooMeshes){ if(b.eaten)continue;
         const dx=b.m.position.x-unicorn.position.x, dz=b.m.position.z-unicorn.position.z;
         if(dx*dx+dz*dz<2.6&&unicorn.position.y<4){ b.eaten=true; b.m.visible=false; bambooEaten++;
-          puff(b.m.position.x,1.5,b.m.position.z,1.4); blip(520+bambooEaten*160); addScore(hardMode?30:15);
+          puff(b.m.position.x,1.5,b.m.position.z,1.4); sfx('bamboo'); addScore(hardMode?30:15);
           if(bambooEaten>=bambooNeed){ startRide(); }
           else document.getElementById('objective').textContent=`🎋 Bamboo ${bambooEaten}/${bambooNeed} — find more shoots!`; } }
     }
@@ -1770,9 +1931,9 @@ function animate(){
         const lb=document.getElementById('levelBadge'); lb.textContent='🍼 Lv 4 Baby';
         document.getElementById('objective').textContent='🍼 Level 4 BABY PANDA — explore the sanctuary!';
         showToast('<div style="font-size:56px">🍼</div><b style="font-size:28px">LEVEL 4 UNLOCKED · BABY PANDA!</b><br><span>So tiny, so magical!</span>',6);
-        document.getElementById('playBtn').innerHTML=playMode?'⏹️ Exit Baby Panda (Esc)':'🐼 Play as Baby Panda';
+        document.getElementById('playBtn').textContent=playMode?'⏹ exit game mode':'▶ Play';
         addScore(200);
-        blip(1046); blip(1318); blip(1760);
+        sfx('levelup');
         }
       }
     }
@@ -1922,6 +2083,17 @@ function animate(){
     document.getElementById('statVox').textContent=voxelCount+petalData.length;
   }
 }
+/* Boot: unicorn waits just outside the torii gate facing the pagoda; game mode on, menu closed, wind+chimes on */
+unicorn.position.set(0, 0.12+groundY(0,26), 26);
+unicorn.rotation.y=Math.PI; // face -z toward the torii + pagoda
+uniGroundY=groundY(0,26);
+refreshAutoBtn();
+setPlay(true);
+document.body.classList.add('ui-hidden');
+if(typeof toggleMenu==='function') toggleMenu(false);
+try{ startAudio(); }catch(e){} // allowed after first gesture; resumes automatically
+addEventListener('pointerdown',()=>{ if(audioOn&&AC&&AC.state==='suspended') AC.resume(); },{passive:true});
+addEventListener('keydown',()=>{ if(audioOn&&AC&&AC.state==='suspended') AC.resume(); });
 animate();
 
 addEventListener('resize', ()=>{
