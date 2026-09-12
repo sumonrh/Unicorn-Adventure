@@ -40,7 +40,7 @@
   #touchUI .tcluster{position:fixed;bottom:14px;display:flex;gap:10px;pointer-events:none}
   #touchUI .tleft{left:14px}
   #touchUI .tright{right:14px;align-items:flex-end}
-  #touchUI .tdpad{display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(3,56px);gap:6px;pointer-events:none}
+  #touchUI .tdpad{display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(2,56px);gap:6px;pointer-events:none}
   #touchUI button{pointer-events:auto;touch-action:none;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none;
     width:56px;height:56px;border-radius:14px;font-size:22px;font-weight:800;color:#fff;
     background:rgba(15,23,42,.38);border:2px solid rgba(255,255,255,.55);backdrop-filter:blur(6px)}
@@ -69,6 +69,14 @@
     <div class="p-2">
       <button id="playBtn" class="btn mc-btn w-full rounded-none px-2 py-2 text-xs font-extrabold">▶ Play</button>
       <p class="text-[9px] text-white/60 mt-1 text-center">Ride: W run · A/D steer · S brake · arrows work too · touch pad on mobile</p>
+    </div>
+  </details>
+
+  <details class="mc-sec rounded-none mt-2">
+    <summary>🎥 Camera</summary>
+    <div class="p-2 flex gap-1.5">
+      <button id="camThirdBtn" class="btn mc-btn active flex-1 rounded-none px-2 py-1.5 text-xs font-bold">🎥 Third</button>
+      <button id="camFirstBtn" class="btn mc-btn flex-1 rounded-none px-2 py-1.5 text-xs font-bold">🦄 First</button>
     </div>
   </details>
 
@@ -125,19 +133,20 @@
 
   <details class="mc-sec rounded-none mt-2">
     <summary>⚙️ Options</summary>
-    <div class="p-2 flex gap-1.5">
-      <button id="helpBtn" class="btn mc-btn flex-1 rounded-none px-2 py-1.5 text-xs font-bold">❓ Help</button>
-      <button id="hideUiBtn" class="btn mc-btn flex-1 rounded-none px-2 py-1.5 text-xs font-bold">👁️ Hide Menu</button>
+    <div class="p-2 flex flex-col gap-1.5">
+      <div class="flex gap-1.5">
+        <button id="helpBtn" class="btn mc-btn flex-1 rounded-none px-2 py-1.5 text-xs font-bold">❓ Help</button>
+        <button id="hideUiBtn" class="btn mc-btn flex-1 rounded-none px-2 py-1.5 text-xs font-bold">👁️ Hide Menu</button>
+      </div>
+      <button id="fullscreenBtn" class="btn mc-btn w-full rounded-none px-2 py-1.5 text-xs font-bold">⛶ Fullscreen: Off</button>
     </div>
   </details>
 </div>
 
-<div id="gameHud" class="fixed top-3 left-1/2 -translate-x-1/2 z-20 hidden">
+<div id="gameHud" class="fixed top-3 right-3 z-20 hidden">
   <div class="glass rounded-2xl px-4 py-2 text-white text-center whitespace-nowrap">
     <span class="font-extrabold">⭐ <span id="starCount">0</span> stars</span>
     <span class="font-extrabold ml-2">🏆 <span id="scoreVal">0</span></span>
-    <button id="camThirdBtn" class="btn active rounded-lg px-2 py-1 text-xs font-bold bg-white/10 border border-white/20 ml-3">🎥 Third</button>
-    <button id="camFirstBtn" class="btn rounded-lg px-2 py-1 text-xs font-bold bg-white/10 border border-white/20 ml-1">🦄 First</button>
     <span id="levelBadge" class="hidden text-xs font-extrabold ml-2 px-2 py-0.5 rounded-lg bg-amber-400 text-amber-950">👑 Lv 2</span>
     <div id="objective" class="text-amber-200 text-xs mt-1">⭐ Collect 10 stars to reveal the maze</div>
   </div>
@@ -157,7 +166,6 @@
     <div class="tdpad">
       <span></span><button data-k="w" aria-label="Forward">▲</button><span></span>
       <button data-k="a" aria-label="Left">◀</button><button data-k="s" aria-label="Back">▼</button><button data-k="d" aria-label="Right">▶</button>
-      <span></span><button id="touchCam" aria-label="Camera">🎥</button><span></span>
     </div>
   </div>
   <div class="tcluster tright">
@@ -1658,6 +1666,14 @@ document.getElementById('helpBtn').onclick=()=>toggleHelp();
 document.getElementById('helpClose').onclick=()=>toggleHelp(false);
 document.getElementById('helpModal').onclick=e=>{ if(e.target.id==='helpModal') toggleHelp(false); };
 document.getElementById('hideUiBtn').onclick=()=>toggleUI();
+function refreshFullscreenBtn(){ const on=!!document.fullscreenElement;
+  document.getElementById('fullscreenBtn').textContent=on?'⛶ Fullscreen: On':'⛶ Fullscreen: Off';
+  document.getElementById('fullscreenBtn').classList.toggle('active',on); }
+document.getElementById('fullscreenBtn').onclick=async()=>{ try{
+    if(!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    else await document.exitFullscreen();
+  }catch(e){} refreshFullscreenBtn(); sfx('ui'); };
+document.addEventListener('fullscreenchange',refreshFullscreenBtn);
 /* Touch controls: hold D-pad / action buttons -> same keys object as keyboard */
 function pressTouch(k,down,el){
   const map={ e:'space' }; // ✨ Interact acts as contextual SPACE (jump / mash / fly) since pickup is proximity-based
@@ -1676,8 +1692,6 @@ document.querySelectorAll('#touchUI [data-k]').forEach(btn=>{
   btn.addEventListener('pointerleave',off);
   btn.addEventListener('contextmenu',e=>e.preventDefault());
 });
-const touchCam=document.getElementById('touchCam');
-if(touchCam) touchCam.addEventListener('click',e=>{ e.preventDefault(); if(playMode){ setView(!fpView); sfx('ui'); } });
 // first- / third-person ride camera
 let fpView=false;
 const _fp=new THREE.Vector3();
