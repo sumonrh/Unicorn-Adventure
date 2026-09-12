@@ -2083,10 +2083,10 @@ function animate(){
     document.getElementById('statVox').textContent=voxelCount+petalData.length;
   }
 }
-/* Boot: unicorn waits just outside the torii gate facing the pagoda; game mode on, menu closed, wind+chimes on */
-unicorn.position.set(0, 0.12+groundY(0,26), 26);
+/* Boot: unicorn waits down the flower avenue facing the torii + pagoda; game mode on, menu closed, wind+chimes on */
+unicorn.position.set(0, 0.12+groundY(0,44), 44);
 unicorn.rotation.y=Math.PI; // face -z toward the torii + pagoda
-uniGroundY=groundY(0,26);
+uniGroundY=groundY(0,44);
 refreshAutoBtn();
 setPlay(true);
 document.body.classList.add('ui-hidden');
